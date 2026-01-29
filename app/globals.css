@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Leaflet tooltip */
+.leaflet-tooltip.fence-tooltip {
+  @apply border-0 bg-white/95 px-2 py-1.5 text-sm font-medium text-slate-700 shadow-md backdrop-blur;
+  border-radius: 6px;
+}
+
+/* Leaflet popup */
+.leaflet-popup-content-wrapper.fence-popup {
+  @apply rounded-lg border border-slate-200/80 shadow-lg;
+}
+
+.leaflet-popup-content {
+  margin: 12px 14px;
+  min-width: 180px;
+}
