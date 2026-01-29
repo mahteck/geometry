@@ -6,6 +6,9 @@
 .leaflet-tooltip.fence-tooltip {
   @apply border-0 bg-white/95 px-2 py-1.5 text-sm font-medium text-slate-700 shadow-md backdrop-blur;
   border-radius: 6px;
+  min-width: 140px;
+  line-height: 1.4;
+  white-space: normal;
 }
 
 /* Leaflet popup */

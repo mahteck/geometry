@@ -31,5 +31,9 @@ export interface GeoJSONFeatureCollection<F = GeoJSONFeature> {
 
 export interface FenceFeature extends GeoJSONFeature {
   id: number;
-  properties: { name: string };
+  properties: {
+    name: string;
+    address?: string | null;
+    city?: string | null;
+  };
 }

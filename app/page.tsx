@@ -10,7 +10,7 @@ export default function Home() {
         <p className="mt-3 text-slate-600">
           View and explore PostGIS fence polygons from{" "}
           <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm">
-            cherat_fences
+            fences
           </code>{" "}
           on an interactive map. Hover over a fence for its name, or click to see
           area, perimeter, and other details.

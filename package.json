@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:test": "node scripts/test-db.mjs"
+    "db:test": "node scripts/test-db.mjs",
+    "transform:fences": "node scripts/transform-excel-to-fences.mjs"
   },
   "dependencies": {
     "next": "14.2.18",
@@ -15,7 +16,8 @@
     "react-dom": "^18.3.1",
     "pg": "^8.13.1",
     "react-leaflet": "^4.2.1",
-    "leaflet": "^1.9.4"
+    "leaflet": "^1.9.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^20.17.6",

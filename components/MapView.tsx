@@ -11,6 +11,24 @@ const FILL_OPACITY_HOVER = 0.6;
 const STROKE = "#ff0000";
 const STROKE_WEIGHT = 2;
 
+function esc(s: string): string {
+  const el = document.createElement("div");
+  el.textContent = s;
+  return el.innerHTML;
+}
+
+function tooltipContent(feat: FenceFeature): string {
+  const name = feat.properties?.name ?? `Zone_${feat.id ?? "?"}`;
+  const id = feat.id ?? "?";
+  const addr = (feat.properties?.address ?? "").toString().trim();
+  const city = (feat.properties?.city ?? "").toString().trim();
+  const parts: string[] = [];
+  parts.push(`<span class="font-semibold">${esc(name)} (ID: ${id})</span>`);
+  if (addr) parts.push(`<span>Address: ${esc(addr)}</span>`);
+  if (city) parts.push(`<span>City: ${esc(city)}</span>`);
+  return parts.join("<br/>");
+}
+
 export default function MapView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
@@ -48,18 +66,16 @@ export default function MapView() {
             color: STROKE,
             weight: STROKE_WEIGHT,
           }),
-          onEachFeature(f: unknown, layer: { bindTooltip: (s: string, o?: object) => void; bindPopup: (s: string) => void; on: (e: object) => void }) {
+          onEachFeature(f: unknown, layer: { bindTooltip: (s: string, o?: object) => void; bindPopup: (s: string, o?: object) => void; on: (e: object) => void }) {
             const feat = f as FenceFeature;
-            const name = feat.properties?.name ?? `Zone_${feat.id ?? "?"}`;
-            const id = feat.id ?? "?";
-            const label = `${name} (ID: ${id})`;
+            const html = tooltipContent(feat);
 
-            layer.bindTooltip(label, {
+            layer.bindTooltip(html, {
               sticky: true,
               className: "fence-tooltip",
               offset: [0, -2],
             });
-            layer.bindPopup(label);
+            layer.bindPopup(html, { maxWidth: 320 });
 
             layer.on({
               mouseover(e: { target: { setStyle: (s: object) => void; bringToFront: () => void } }) {
