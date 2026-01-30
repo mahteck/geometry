@@ -1,16 +1,15 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { parseBbox, buildFilterClauses, FENCES_TABLE } from "@/lib/fenceApi";
 import type {
   GeoJSONFeatureCollection,
   FenceFeature,
   GeoJSONGeometry,
   GeoJSONPolygonCoords,
+  GeoJSONMultiPolygonCoords,
   CreateFenceBody,
   FenceApiResponse,
 } from "@/types/fence";
-
-const _t = (process.env.FENCES_TABLE || "fence").trim();
-export const FENCES_TABLE = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(_t) ? _t : "fence";
 
 // Use ST_Dump to explode MultiPolygon rows into separate Polygon features
 function sqlSimple(bboxClause: string) {
@@ -78,7 +77,7 @@ function toFeatures(rows: RowSimple[] | RowExtended[], extended: boolean): Fence
 
   // Convert to features: one feature per fence
   const features: FenceFeature[] = [];
-  for (const [id, data] of fenceMap.entries()) {
+  for (const [id, data] of Array.from(fenceMap.entries())) {
     if (data.geometries.length === 0) continue;
     
     // If single polygon, use as-is; if multiple, create MultiPolygon
@@ -121,88 +120,6 @@ function isValidPolygon(geom: GeoJSONGeometry): boolean {
   const ring = coords[0];
   if (!Array.isArray(ring) || ring.length < 3) return false;
   return true;
-}
-
-/** Parse bbox query: minLng,minLat,maxLng,maxLat (WGS84). Returns null if invalid. */
-export function parseBbox(searchParams: URLSearchParams): number[] | null {
-  const bbox = searchParams.get("bbox");
-  if (!bbox) return null;
-  const parts = bbox.split(",").map((s) => parseFloat(s.trim()));
-  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null;
-  const [minLng, minLat, maxLng, maxLat] = parts;
-  if (minLng >= maxLng || minLat >= maxLat) return null;
-  return [minLng, minLat, maxLng, maxLat];
-}
-
-export type FilterParams = {
-  search?: string;
-  region?: string;
-  status?: string;
-  minArea?: number;
-  maxArea?: number;
-};
-
-/** Build filter WHERE clauses and params for GET /api/fences. */
-export function buildFilterClauses(searchParams: URLSearchParams): { clauses: string; params: unknown[] } {
-  const params: unknown[] = [];
-  const clauses: string[] = [];
-  let idx = 0;
-
-  /* Use only f.name so search works when table has no city column (simple schema). */
-  const search = searchParams.get("search")?.trim();
-  if (search) {
-    idx++;
-    params.push(`%${search}%`);
-    clauses.push(`(f.name ILIKE $${idx})`);
-  }
-
-  const region = searchParams.get("region")?.toLowerCase();
-  if (region && ["lahore", "karachi", "islamabad", "other"].includes(region)) {
-    if (region === "other") {
-      clauses.push(`(f.name NOT ILIKE '%lahore%' AND f.name NOT ILIKE '%karachi%' AND f.name NOT ILIKE '%islamabad%')`);
-    } else {
-      idx++;
-      params.push(`%${region}%`);
-      clauses.push(`(f.name ILIKE $${idx})`);
-    }
-  }
-
-  const statusParam = searchParams.get("status") ?? searchParams.get("active");
-  if (statusParam !== null && statusParam !== undefined && statusParam !== "") {
-    const s = String(statusParam).toLowerCase();
-    if (s === "true" || s === "active") {
-      idx++;
-      params.push("active");
-      clauses.push(`COALESCE(f.status, '') = $${idx}`);
-    } else if (s === "false" || s === "inactive") {
-      idx++;
-      params.push("inactive");
-      clauses.push(`COALESCE(f.status, '') = $${idx}`);
-    }
-  }
-
-  const minArea = searchParams.get("minArea");
-  if (minArea != null && minArea !== "") {
-    const n = parseFloat(minArea);
-    if (Number.isFinite(n) && n >= 0) {
-      idx++;
-      params.push(n);
-      clauses.push(`ST_Area(d.geom::geography) >= $${idx}`);
-    }
-  }
-
-  const maxArea = searchParams.get("maxArea");
-  if (maxArea != null && maxArea !== "") {
-    const n = parseFloat(maxArea);
-    if (Number.isFinite(n) && n >= 0) {
-      idx++;
-      params.push(n);
-      clauses.push(`ST_Area(d.geom::geography) <= $${idx}`);
-    }
-  }
-
-  const clauseStr = clauses.length ? ` AND ${clauses.join(" AND ")}` : "";
-  return { clauses: clauseStr, params };
 }
 
 export async function GET(request: Request) {

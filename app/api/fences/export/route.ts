@@ -4,7 +4,7 @@ import {
   parseBbox,
   buildFilterClauses,
   FENCES_TABLE,
-} from "@/app/api/fences/route";
+} from "@/lib/fenceApi";
 import type { FenceFeature, GeoJSONFeatureCollection } from "@/types/fence";
 
 const KML_NS = "http://www.opengis.net/kml/2.2";
@@ -234,12 +234,12 @@ export async function GET(request: Request) {
           const r = await client.query<RowCSV>(sqlSimple, filterParams);
           rows = r.rows;
         }
-        function escapeCsv(val: string | null | undefined): string {
+        const escapeCsv = (val: string | null | undefined): string => {
           if (val == null) return "";
           const s = String(val);
           if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
           return s;
-        }
+        };
         const header = "id,name,address,city,geometry_wkt";
         const lines = [header];
         for (const row of rows) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -42,11 +42,17 @@ function ResetView({ center, zoom }: { center: [number, number]; zoom: number })
   return null;
 }
 
-/** Capture map instance for imperative zoom */
+/** Capture map instance and handle zoom/reset from props */
 function MapController({
   mapRef,
+  cityToZoom,
+  onZoomDone,
+  resetTrigger,
 }: {
   mapRef: React.MutableRefObject<ReturnType<typeof useMap> | null>;
+  cityToZoom?: CityFeature | null;
+  onZoomDone?: () => void;
+  resetTrigger?: number;
 }) {
   const map = useMap();
   useEffect(() => {
@@ -55,6 +61,21 @@ function MapController({
       mapRef.current = null;
     };
   }, [map, mapRef]);
+
+  useEffect(() => {
+    if (cityToZoom && map) {
+      const [lng, lat] = cityToZoom.geometry.coordinates;
+      map.setView([lat, lng], 12);
+      onZoomDone?.();
+    }
+  }, [cityToZoom, map, onZoomDone]);
+
+  useEffect(() => {
+    if (resetTrigger && resetTrigger > 0 && map) {
+      map.setView(CENTER, ZOOM);
+    }
+  }, [resetTrigger, map]);
+
   return null;
 }
 
@@ -63,19 +84,20 @@ interface PakistanMapProps {
   showDistricts: boolean;
   showCities: boolean;
   provinceFilter: string;
+  cityToZoom?: CityFeature | null;
+  onZoomDone?: () => void;
+  resetTrigger?: number;
 }
 
-export interface PakistanMapHandle {
-  zoomToCity: (city: CityFeature) => void;
-  resetView: () => void;
-}
-
-const PakistanMap = forwardRef<PakistanMapHandle, PakistanMapProps>(function PakistanMap({
+export default function PakistanMap({
   showProvinces,
   showDistricts,
   showCities,
   provinceFilter,
-}, ref) {
+  cityToZoom,
+  onZoomDone,
+  resetTrigger = 0,
+}: PakistanMapProps) {
   const [provinces, setProvinces] = useState<ProvinceFeature[]>([]);
   const [districts, setDistricts] = useState<DistrictFeature[]>([]);
   const [cities, setCities] = useState<CityFeature[]>([]);
@@ -84,16 +106,6 @@ const PakistanMap = forwardRef<PakistanMapHandle, PakistanMapProps>(function Pak
   const [hoveredProvince, setHoveredProvince] = useState<number | null>(null);
   const [hoveredDistrict, setHoveredDistrict] = useState<number | null>(null);
   const mapRef = useRef<ReturnType<typeof useMap> | null>(null);
-
-  useImperativeHandle(ref, () => ({
-    zoomToCity(city: CityFeature) {
-      const [lng, lat] = city.geometry.coordinates;
-      mapRef.current?.setView([lat, lng], 12);
-    },
-    resetView() {
-      mapRef.current?.setView(CENTER, ZOOM);
-    },
-  }));
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -187,7 +199,12 @@ const PakistanMap = forwardRef<PakistanMapHandle, PakistanMapProps>(function Pak
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ResetView center={CENTER} zoom={ZOOM} />
-        <MapController mapRef={mapRef} />
+        <MapController
+          mapRef={mapRef}
+          cityToZoom={cityToZoom}
+          onZoomDone={onZoomDone}
+          resetTrigger={resetTrigger}
+        />
 
         {/* Each province = separate Polygon */}
         {showProvinces &&
@@ -329,6 +346,4 @@ const PakistanMap = forwardRef<PakistanMapHandle, PakistanMapProps>(function Pak
       </MapContainer>
     </div>
   );
-});
-
-export default PakistanMap;
+}

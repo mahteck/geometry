@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
-import { FENCES_TABLE } from "@/app/api/fences/route";
+import { FENCES_TABLE } from "@/lib/fenceApi";
 
 const M2_TO_SQKM = 1e6;
 

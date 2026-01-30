@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import PakistanSidebar from "@/components/PakistanSidebar";
 import PakistanLegend from "@/components/PakistanLegend";
 import type { CityFeature } from "@/types/pakistan";
-import type { PakistanMapHandle } from "@/components/PakistanMap";
 
 const PakistanMap = dynamic(() => import("@/components/PakistanMap"), {
   ssr: false,
-  forwardRef: true,
   loading: () => (
     <div className="flex h-full min-h-[400px] w-full items-center justify-center bg-slate-100">
       <div className="flex flex-col items-center gap-3">
@@ -35,10 +33,11 @@ export default function PakistanMapPage() {
   const [showDistricts, setShowDistricts] = useState(false);
   const [showCities, setShowCities] = useState(true);
   const [selectedProvince, setSelectedProvince] = useState("");
-  const mapRef = useRef<PakistanMapHandle | null>(null);
+  const [cityToZoom, setCityToZoom] = useState<CityFeature | null>(null);
+  const [resetTrigger, setResetTrigger] = useState(0);
 
   const handleCitySelect = useCallback((city: CityFeature) => {
-    mapRef.current?.zoomToCity(city);
+    setCityToZoom(city);
   }, []);
 
   return (
@@ -57,18 +56,20 @@ export default function PakistanMapPage() {
       />
       <main className="relative min-w-0 flex-1">
         <PakistanMap
-          ref={mapRef}
           showProvinces={showProvinces}
           showDistricts={showDistricts}
           showCities={showCities}
           provinceFilter={selectedProvince}
+          cityToZoom={cityToZoom}
+          onZoomDone={() => setCityToZoom(null)}
+          resetTrigger={resetTrigger}
         />
         <div className="absolute bottom-4 right-4 z-[1000]">
           <PakistanLegend />
         </div>
         <div className="absolute left-4 top-4 z-[1000] flex gap-2">
           <button
-            onClick={() => mapRef.current?.resetView()}
+            onClick={() => setResetTrigger((n) => n + 1)}
             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow hover:bg-slate-50"
           >
             Reset View

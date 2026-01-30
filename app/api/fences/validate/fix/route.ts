@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
-import { FENCES_TABLE } from "@/app/api/fences/route";
+import { FENCES_TABLE } from "@/lib/fenceApi";
 
 /** POST /api/fences/validate/fix – apply ST_MakeValid to given fence IDs */
 export async function POST(request: Request) {

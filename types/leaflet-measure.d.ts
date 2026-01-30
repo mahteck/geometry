@@ -1,7 +1,7 @@
 /**
  * Type declarations for leaflet-measure (L.control.measure)
  */
-import type "leaflet";
+/// <reference types="leaflet" />
 
 export interface MeasureResult {
   area: number;

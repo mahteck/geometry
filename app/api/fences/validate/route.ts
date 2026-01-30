@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import pool from "@/lib/db";
-import { FENCES_TABLE } from "@/app/api/fences/route";
+import { FENCES_TABLE } from "@/lib/fenceApi";
 import type { GeoJSONGeometry, GeoJSONPolygonCoords, GeoJSONMultiPolygonCoords } from "@/types/fence";
 
 export interface ValidationIssue {

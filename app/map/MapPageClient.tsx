@@ -13,6 +13,7 @@ import DashboardPanel from "@/components/DashboardPanel";
 import ValidationPanel from "@/components/ValidationPanel";
 import type { ValidateResponse } from "@/app/api/fences/validate/route";
 import type { FenceFeature } from "@/types/fence";
+import type { MapViewHandle } from "@/components/MapView";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -29,7 +30,7 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 export default function MapPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const mapRef = useRef<{ zoomToFeature: (feat: FenceFeature) => void; refetchFences: () => void } | null>(null);
+  const mapRef = useRef<MapViewHandle | null>(null);
 
   const filterState: FilterState = paramsToFilterState(searchParams);
   const [results, setResults] = useState<FenceFeature[]>([]);
