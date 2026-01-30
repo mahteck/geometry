@@ -35,5 +35,27 @@ export interface FenceFeature extends GeoJSONFeature {
     name: string;
     address?: string | null;
     city?: string | null;
+    /** active | inactive – used for styling (green vs gray) */
+    status?: string | null;
+    [key: string]: unknown;
   };
+}
+
+/** Request body for creating a fence (POST /api/fences) */
+export interface CreateFenceBody {
+  name?: string;
+  geometry: GeoJSONGeometry;
+}
+
+/** Request body for updating a fence (PUT /api/fences/[id]) */
+export interface UpdateFenceBody {
+  name?: string;
+  geometry: GeoJSONGeometry;
+}
+
+/** API response for single fence create/update */
+export interface FenceApiResponse {
+  id: number;
+  name: string;
+  geometry: GeoJSONGeometry;
 }

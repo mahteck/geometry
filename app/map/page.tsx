@@ -1,6 +1,7 @@
 import dynamic from "next/dynamic";
+import { Suspense } from "react";
 
-const MapView = dynamic(() => import("@/components/MapView"), {
+const MapPageClient = dynamic(() => import("./MapPageClient"), {
   ssr: false,
   loading: () => (
     <div className="flex h-full min-h-[400px] w-full items-center justify-center bg-slate-100">
@@ -15,7 +16,15 @@ const MapView = dynamic(() => import("@/components/MapView"), {
 export default function MapPage() {
   return (
     <div className="h-[calc(100vh-3.5rem)] w-full overflow-hidden">
-      <MapView />
+      <Suspense
+        fallback={
+          <div className="flex h-full w-full items-center justify-center bg-slate-100">
+            <p className="text-slate-600 text-sm">Loading…</p>
+          </div>
+        }
+      >
+        <MapPageClient />
+      </Suspense>
     </div>
   );
 }

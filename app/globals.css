@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Leaflet Draw toolbar */
+@import "leaflet-draw/dist/leaflet.draw.css";
+
+/* Leaflet Measure */
+@import "leaflet-measure/dist/leaflet-measure.css";
+
 /* Leaflet tooltip */
 .leaflet-tooltip.fence-tooltip {
   @apply border-0 bg-white/95 px-2 py-1.5 text-sm font-medium text-slate-700 shadow-md backdrop-blur;

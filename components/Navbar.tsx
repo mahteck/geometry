@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 
 const nav = [
   { href: "/", label: "Home" },
-  { href: "/map", label: "Map" },
+  { href: "/map", label: "Fence Map" },
+  { href: "/pakistan-map", label: "Pakistan Map" },
 ];
 
 export default function Navbar() {

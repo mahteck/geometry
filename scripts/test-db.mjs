@@ -28,6 +28,7 @@ async function main() {
     process.exit(0);
   } catch (err) {
     console.error("Database connection failed:", err.message);
+    console.error("Tip: Check DB_HOST, DB_PORT, network, firewall. Using " + (process.env.DB_HOST || "?") + ":" + (process.env.DB_PORT || "5432"));
     process.exit(1);
   }
 }
