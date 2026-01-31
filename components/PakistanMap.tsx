@@ -10,7 +10,9 @@ import {
   useMap,
 } from "react-leaflet";
 import type { ProvinceFeature, DistrictFeature, CityFeature } from "@/types/pakistan";
+import type { RoadSelection } from "@/types/roads";
 import { getProvinceColor } from "@/lib/pakistanStyles";
+import RoadLayers from "./RoadLayers";
 
 const CENTER: [number, number] = [30.3753, 69.3451];
 const ZOOM = 6;
@@ -83,20 +85,28 @@ interface PakistanMapProps {
   showProvinces: boolean;
   showDistricts: boolean;
   showCities: boolean;
+  showMotorways?: boolean;
+  showHighways?: boolean;
   provinceFilter: string;
   cityToZoom?: CityFeature | null;
   onZoomDone?: () => void;
   resetTrigger?: number;
+  selectedRoad?: RoadSelection | null;
+  onRoadSelect?: (road: RoadSelection) => void;
 }
 
 export default function PakistanMap({
   showProvinces,
   showDistricts,
   showCities,
+  showMotorways = true,
+  showHighways = true,
   provinceFilter,
   cityToZoom,
   onZoomDone,
   resetTrigger = 0,
+  selectedRoad = null,
+  onRoadSelect,
 }: PakistanMapProps) {
   const [provinces, setProvinces] = useState<ProvinceFeature[]>([]);
   const [districts, setDistricts] = useState<DistrictFeature[]>([]);
@@ -204,6 +214,12 @@ export default function PakistanMap({
           cityToZoom={cityToZoom}
           onZoomDone={onZoomDone}
           resetTrigger={resetTrigger}
+        />
+        <RoadLayers
+          showMotorways={showMotorways}
+          showHighways={showHighways}
+          selectedRoad={selectedRoad ?? null}
+          onRoadSelect={onRoadSelect ?? (() => {})}
         />
 
         {/* Each province = separate Polygon */}

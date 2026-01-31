@@ -19,7 +19,7 @@ export default function PakistanLegend() {
   return (
     <div className="rounded-lg border border-slate-200 bg-white/95 p-2 shadow-md backdrop-blur">
       <p className="mb-2 text-xs font-semibold text-slate-600">Provinces</p>
-      <div className="flex flex-wrap gap-2">
+      <div className="mb-2 flex flex-wrap gap-2">
         {uniqueCodes.map((code) => (
           <div key={code} className="flex items-center gap-1.5">
             <div
@@ -31,6 +31,17 @@ export default function PakistanLegend() {
             </span>
           </div>
         ))}
+      </div>
+      <p className="mb-1 text-xs font-semibold text-slate-600">Roads</p>
+      <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-1.5">
+          <div className="h-2 w-4 shrink-0 rounded-sm bg-[#10b981]" />
+          <span className="text-xs text-slate-700">Motorways</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-2 w-4 shrink-0 rounded-sm bg-[#3b82f6]" />
+          <span className="text-xs text-slate-700">Highways</span>
+        </div>
       </div>
     </div>
   );

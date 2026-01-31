@@ -2,19 +2,29 @@
 
 import { useState, useCallback, useEffect } from "react";
 import PakistanStats from "./PakistanStats";
+import RoadStats from "./RoadStats";
+import RoadSearch from "./RoadSearch";
+import RoutePlanner from "./RoutePlanner";
 import type { PakistanStats as PakistanStatsType } from "@/types/pakistan";
 import type { CityFeature } from "@/types/pakistan";
+import type { RoadSelection } from "@/types/roads";
 
 interface PakistanSidebarProps {
   showProvinces: boolean;
   showDistricts: boolean;
   showCities: boolean;
+  showMotorways: boolean;
+  showHighways: boolean;
   onShowProvincesChange: (v: boolean) => void;
   onShowDistrictsChange: (v: boolean) => void;
   onShowCitiesChange: (v: boolean) => void;
+  onShowMotorwaysChange: (v: boolean) => void;
+  onShowHighwaysChange: (v: boolean) => void;
   selectedProvince: string;
   onProvinceChange: (v: string) => void;
   onCitySelect?: (city: CityFeature) => void;
+  onRoadSelect?: (road: RoadSelection) => void;
+  onRoadFound?: (result: { type: "motorway" | "highway"; id: number }) => void;
   provinces?: { code: string; name: string }[];
 }
 
@@ -22,12 +32,18 @@ export default function PakistanSidebar({
   showProvinces,
   showDistricts,
   showCities,
+  showMotorways,
+  showHighways,
   onShowProvincesChange,
   onShowDistrictsChange,
   onShowCitiesChange,
+  onShowMotorwaysChange,
+  onShowHighwaysChange,
   selectedProvince,
   onProvinceChange,
   onCitySelect,
+  onRoadSelect,
+  onRoadFound,
   provinces = [],
 }: PakistanSidebarProps) {
   const [search, setSearch] = useState("");
@@ -177,6 +193,29 @@ export default function PakistanSidebar({
         </label>
       </div>
 
+      {/* Road layers */}
+      <div className="mb-3">
+        <p className="mb-2 text-sm font-medium text-slate-600">Road Networks</p>
+        <label className="flex cursor-pointer items-center gap-2 py-1">
+          <input
+            type="checkbox"
+            checked={showMotorways}
+            onChange={(e) => onShowMotorwaysChange(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          <span className="text-sm text-slate-700">Show Motorways</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 py-1">
+          <input
+            type="checkbox"
+            checked={showHighways}
+            onChange={(e) => onShowHighwaysChange(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          <span className="text-sm text-slate-700">Show Highways</span>
+        </label>
+      </div>
+
       {/* Province filter */}
       <div className="mb-3">
         <label className="mb-1 block text-sm font-medium text-slate-600">
@@ -240,6 +279,15 @@ export default function PakistanSidebar({
       </form>
 
       <PakistanStats stats={stats} loading={statsLoading} />
+      <div className="mt-3">
+        <RoadSearch onRoadSelect={onRoadSelect ?? (() => {})} />
+      </div>
+      <div className="mt-3">
+        <RoadStats />
+      </div>
+      <div className="mt-3">
+        <RoutePlanner onCitySelect={onCitySelect} onRoadFound={onRoadFound} />
+      </div>
 
       {/* Export */}
       <div className="mt-3 border-t border-slate-200 pt-3">

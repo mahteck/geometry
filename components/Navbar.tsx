@@ -7,6 +7,7 @@ const nav = [
   { href: "/", label: "Home" },
   { href: "/map", label: "Fence Map" },
   { href: "/pakistan-map", label: "Pakistan Map" },
+  { href: "/pakistan-dashboard", label: "Dashboard" },
 ];
 
 export default function Navbar() {

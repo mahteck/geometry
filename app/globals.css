@@ -26,3 +26,10 @@
   margin: 12px 14px;
   min-width: 180px;
 }
+
+/* Road hover tooltips */
+.road-tooltip.leaflet-tooltip {
+  @apply border-0 bg-white/95 px-2 py-1.5 text-sm shadow-md;
+  border-radius: 6px;
+  white-space: nowrap;
+}

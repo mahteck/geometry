@@ -10,7 +10,8 @@
     "db:test": "node scripts/test-db.mjs",
     "transform:fences": "node scripts/transform-excel-to-fences.mjs",
     "setup:pakistan": "node scripts/setup-pakistan-db.mjs",
-    "import:pakistan": "node scripts/import-pakistan-data.mjs"
+    "import:pakistan": "node scripts/import-pakistan-data.mjs",
+    "setup:roads": "node scripts/setup-roads-db.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
