@@ -45,7 +45,7 @@ export async function GET(request: Request) {
             surface_type: row.surface_type ?? "",
             condition: row.condition ?? "good",
           },
-          geometry: geom,
+          geometry: { type: "LineString" as const, coordinates: geom.coordinates },
         };
       });
 

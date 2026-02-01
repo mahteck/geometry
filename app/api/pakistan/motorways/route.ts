@@ -53,7 +53,7 @@ export async function GET(request: Request) {
             operator: row.operator ?? "",
             speed_limit: row.speed_limit,
           },
-          geometry: geom,
+          geometry: { type: "LineString" as const, coordinates: geom.coordinates },
         };
       });
 
