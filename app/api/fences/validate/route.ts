@@ -11,6 +11,12 @@ export interface ValidationIssue {
   isSimple: boolean;
   hasUnclosedRing: boolean;
   hasDuplicateVertices: boolean;
+  /** True when this fence shares geometry with at least one other fence (after normalization). */
+  isDuplicate: boolean;
+  /** Canonical fence id for this geometry group (null when this fence is itself canonical or group size = 1). */
+  duplicateOfId: number | null;
+  /** Total fences in this normalized-geometry group (including canonical). */
+  duplicateGroupSize: number;
 }
 
 export interface ValidateResponse {
@@ -26,6 +32,8 @@ interface Row {
   valid: boolean;
   valid_reason: string | null;
   simple: boolean;
+  duplicate_group_size: number | null;
+  canonical_id: number | null;
 }
 
 function parseGeometry(raw: unknown): GeoJSONGeometry | null {
@@ -94,16 +102,45 @@ export async function GET() {
     const client = await pool.connect();
     try {
       const sql = `
+        WITH norm AS (
+          SELECT
+            f.id,
+            f.name,
+            ST_AsGeoJSON(f.geom)::json AS geometry,
+            ST_IsValid(f.geom) AS valid,
+            ST_IsValidReason(f.geom) AS valid_reason,
+            ST_IsSimple(f.geom) AS simple,
+            -- Normalize geometry so duplicates can be detected robustly
+            ST_Normalize(
+              ST_SnapToGrid(
+                ST_MakeValid(f.geom),
+                0.000001
+              )
+            ) AS norm_geom
+          FROM ${FENCES_TABLE} f
+          WHERE f.geom IS NOT NULL
+        ),
+        groups AS (
+          SELECT
+            md5(ST_AsBinary(norm_geom)) AS geom_key,
+            MIN(id) AS canonical_id,
+            COUNT(*) AS group_size
+          FROM norm
+          GROUP BY md5(ST_AsBinary(norm_geom))
+        )
         SELECT
-          f.id,
-          f.name,
-          ST_AsGeoJSON(f.geom)::json AS geometry,
-          ST_IsValid(f.geom) AS valid,
-          ST_IsValidReason(f.geom) AS valid_reason,
-          ST_IsSimple(f.geom) AS simple
-        FROM ${FENCES_TABLE} f
-        WHERE f.geom IS NOT NULL
-        ORDER BY f.id
+          n.id,
+          n.name,
+          n.geometry,
+          n.valid,
+          n.valid_reason,
+          n.simple,
+          COALESCE(g.group_size, 1) AS duplicate_group_size,
+          g.canonical_id
+        FROM norm n
+        LEFT JOIN groups g
+          ON md5(ST_AsBinary(n.norm_geom)) = g.geom_key
+        ORDER BY n.id
       `;
       const r = await client.query<Row>(sql);
       const rows = r.rows;
@@ -113,6 +150,11 @@ export async function GET() {
         const geometry = parseGeometry(row.geometry);
         const hasUnclosed = geometry ? hasUnclosedRing(geometry) : false;
         const hasDupVerts = geometry ? hasDuplicateVertices(geometry) : false;
+        const groupSize = row.duplicate_group_size ?? 1;
+        const canonicalId = row.canonical_id ?? row.id;
+        const isDuplicate = groupSize > 1;
+        const isCanonical = row.id === canonicalId;
+        const duplicateOfId = isDuplicate && !isCanonical ? canonicalId : null;
         const invalid =
           !row.valid || !row.simple || hasUnclosed || hasDupVerts;
 
@@ -124,6 +166,9 @@ export async function GET() {
           isSimple: row.simple,
           hasUnclosedRing: hasUnclosed,
           hasDuplicateVertices: hasDupVerts,
+          isDuplicate,
+          duplicateOfId,
+          duplicateGroupSize: groupSize,
         });
       }
 

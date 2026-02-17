@@ -12,9 +12,9 @@ A complete Pakistan administrative boundaries and cities visualization system bu
 
 ## Data Source
 
-- **Location**: `PK/` folder in project root
+- **Location**: `PK1/` (updated) or `PK/` folder in project root
 - **Format**: GeoNames tab-delimited (see `PK/readme.txt`)
-- **File**: `PK/PK.txt` - Pakistan country extract from GeoNames
+- **Files**: `PK1/PK.txt` (preferred) or `PK/PK.txt` - Pakistan country extract from GeoNames
 - **No download needed** - use local data only
 
 ## Setup
@@ -48,20 +48,19 @@ DB_PASSWORD=...
 
 ### 3. Import Data
 
-Import cities and build province/district polygons from `PK/PK.txt`:
-
+**Option A – Recommended (accurate coordinates):**
 ```bash
+npm run import:pakistan:boundaries   # GADM provinces & districts
+npm run import:pakistan:osm          # OSM cities (Overpass API)
+```
+
+**Option B – GeoNames (max coverage, with Pakistan bbox filter):**
+```bash
+# Place PK1/PK.txt or PK/PK.txt first
 npm run import:pakistan
 ```
 
-This will:
-1. Parse `PK/PK.txt` (GeoNames format)
-2. Import cities (feature_class P) with POINT geometry
-3. Import district records (ADM2)
-4. Build province polygons (convex hull from cities per province)
-5. Build district polygons (convex hull from cities per district)
-
-**Note**: Province and district polygons are approximated (convex hulls) since the GeoNames PK.txt contains only point data. For precise boundaries, use GADM or other boundary datasets.
+GeoNames import now excludes points outside Pakistan (60.87–77.84°E, 23.69–37.08°N). For accurate boundaries, run `import:pakistan:boundaries` after to overlay GADM polygons.
 
 ### 4. Run Application
 
@@ -163,8 +162,8 @@ Color legend for provinces.
 ### "Database tables not found"
 Run the SQL setup first: `psql -d vehicle_tracking -f sql/setup_pakistan_geo.sql`
 
-### "PK/PK.txt not found"
-Ensure the `PK` folder exists with `PK.txt` (GeoNames Pakistan dump). The folder may be named `pk` or `PK` depending on your filesystem.
+### "Data file not found"
+Ensure `PK1/PK.txt` or `PK/PK.txt` exists (GeoNames Pakistan dump). PK1 is preferred for updated data.
 
 ### No province polygons displayed
 The import script builds polygons from city convex hulls. Ensure cities were imported successfully. Check: `SELECT COUNT(*) FROM pakistan_cities;`

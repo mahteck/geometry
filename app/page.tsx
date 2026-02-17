@@ -8,22 +8,26 @@ export default function Home() {
           Fence Map
         </h1>
         <p className="mt-3 text-slate-600">
-          View and explore PostGIS fence polygons from{" "}
-          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-sm">
-            fences
-          </code>{" "}
-          on an interactive map. Hover over a fence for its name, or click to see
-          area, perimeter, and other details.
+          View and explore PostGIS fence polygons on an interactive map.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/map"
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
           >
-            Open map
-            <span aria-hidden>→</span>
+            Map (fence table)
+          </Link>
+          <Link
+            href="/gis-map"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            Enterprise GIS Map (fences_master + roads, regions, cities)
           </Link>
         </div>
+        <p className="mt-4 text-xs text-slate-500">
+          <strong>Map</strong> uses the existing <code className="rounded bg-slate-100 px-1 font-mono">fence</code> table.{" "}
+          <strong>Enterprise GIS Map</strong> uses <code className="rounded bg-slate-100 px-1 font-mono">fences_master</code>, roads, regions, cities, areas (separate page).
+        </p>
       </div>
     </div>
   );

@@ -18,6 +18,17 @@ function issueLabels(issue: ValidationIssue): string[] {
   if (!issue.isSimple) labels.push("Self-intersection");
   if (issue.hasUnclosedRing) labels.push("Unclosed polygon");
   if (issue.hasDuplicateVertices) labels.push("Duplicate vertices");
+   if (issue.isDuplicate) {
+    if (issue.duplicateOfId && issue.duplicateOfId !== issue.fenceId) {
+      labels.push(
+        `Duplicate of #${issue.duplicateOfId}${
+          issue.duplicateGroupSize > 1 ? ` (group size: ${issue.duplicateGroupSize})` : ""
+        }`
+      );
+    } else if (issue.duplicateGroupSize > 1) {
+      labels.push(`Canonical in duplicate group (size: ${issue.duplicateGroupSize})`);
+    }
+  }
   return labels;
 }
 
@@ -33,6 +44,7 @@ export default function ValidationPanel({
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [markingInactive, setMarkingInactive] = useState(false);
+  const [deduping, setDeduping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
@@ -83,6 +95,33 @@ export default function ValidationPanel({
     }
   }, [validationResult, onFencesRefreshed, fetchValidation]);
 
+  const handleDedupe = useCallback(async () => {
+    if (!validationResult) return;
+    const duplicateCount =
+      validationResult.issues.filter((i) => i.isDuplicate && i.duplicateOfId && i.duplicateOfId !== i.fenceId).length;
+    if (duplicateCount === 0) return;
+    if (!window.confirm(`Mark non-canonical ${duplicateCount} duplicate fences as 'inactive'?`)) return;
+    setError(null);
+    setDeduping(true);
+    try {
+      const res = await fetch("/api/fences/validate/dedupe", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error((j as { detail?: string }).detail || (j as { error?: string }).error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      alert(`Success! ${data.updatedCount} duplicate fences marked as inactive.`);
+      onFencesRefreshed?.();
+      await fetchValidation();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "De-duplicate failed");
+    } finally {
+      setDeduping(false);
+    }
+  }, [validationResult, onFencesRefreshed, fetchValidation]);
+
   const handleMarkInactive = useCallback(async () => {
     if (!validationResult) return;
     const invalidCount = validationResult.issues.filter(isIssueInvalid).length;
@@ -109,7 +148,12 @@ export default function ValidationPanel({
     }
   }, [validationResult, onFencesRefreshed, fetchValidation]);
 
-  const invalidIssues = validationResult?.issues.filter(isIssueInvalid) ?? [];
+  const invalidIssuesOnly =
+    validationResult?.issues.filter((issue) => isIssueInvalid(issue)) ?? [];
+  const duplicateOnlyIssues =
+    validationResult?.issues.filter(
+      (issue) => issue.isDuplicate && issue.duplicateOfId && issue.duplicateOfId !== issue.fenceId
+    ) ?? [];
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-slate-200/80 bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
@@ -140,12 +184,12 @@ export default function ValidationPanel({
             </div>
           </div>
 
-          {invalidIssues.length > 0 && (
+          {invalidIssuesOnly.length > 0 && (
             <>
               <div className="flex flex-col gap-1">
                 <p className="text-xs font-medium text-slate-600">Issues (click for details)</p>
                 <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
-                  {invalidIssues.map((issue) => {
+                  {invalidIssuesOnly.map((issue) => {
                     const open = expandedId === issue.fenceId;
                     const labels = issueLabels(issue);
                     return (
@@ -173,7 +217,7 @@ export default function ValidationPanel({
                 <button
                   type="button"
                   onClick={handleFix}
-                  disabled={fixing || markingInactive}
+                  disabled={fixing || markingInactive || deduping}
                   className="rounded bg-amber-500 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
                 >
                   {fixing ? "Fixing…" : "Fix automatically (ST_MakeValid)"}
@@ -181,7 +225,7 @@ export default function ValidationPanel({
                 <button
                   type="button"
                   onClick={handleMarkInactive}
-                  disabled={fixing || markingInactive}
+                  disabled={fixing || markingInactive || deduping}
                   className="rounded bg-red-500 px-2 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
                 >
                   {markingInactive ? "Updating…" : "Mark all invalid as Inactive"}
@@ -190,8 +234,32 @@ export default function ValidationPanel({
             </>
           )}
 
-          {validationResult.invalidCount === 0 && validationResult.issues.length > 0 && (
+          {invalidIssuesOnly.length === 0 && validationResult.invalidCount === 0 && validationResult.issues.length > 0 && (
             <p className="text-xs text-green-700">All geometries are valid.</p>
+          )}
+
+          {duplicateOnlyIssues.length > 0 && (
+            <div className="flex flex-col gap-1 border-t border-slate-200 pt-2 mt-2">
+              <p className="text-xs font-medium text-slate-600">Duplicates ({duplicateOnlyIssues.length})</p>
+              <ul className="max-h-28 space-y-1 overflow-y-auto text-xs">
+                {duplicateOnlyIssues.slice(0, 20).map((issue) => (
+                  <li key={issue.fenceId} className="rounded border border-slate-200 bg-slate-50/80 px-2 py-1 text-slate-700">
+                    #{issue.fenceId} {issue.name} → duplicate of #{issue.duplicateOfId}
+                  </li>
+                ))}
+                {duplicateOnlyIssues.length > 20 && (
+                  <li className="text-slate-500">+{duplicateOnlyIssues.length - 20} more</li>
+                )}
+              </ul>
+              <button
+                type="button"
+                onClick={handleDedupe}
+                disabled={fixing || markingInactive || deduping}
+                className="rounded bg-slate-700 px-2 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {deduping ? "De-duplicating…" : "De-duplicate (mark copies Inactive)"}
+              </button>
+            </div>
           )}
         </>
       )}

@@ -20,10 +20,12 @@ const ROOT = path.resolve(__dirname, "..");
 config({ path: path.join(ROOT, ".env.local") });
 config({ path: path.join(ROOT, ".env") });
 
-// Support both PK and pk folder names (case-sensitive filesystems)
-const PK_FILE = fs.existsSync(path.join(ROOT, "PK", "PK.txt"))
-  ? path.join(ROOT, "PK", "PK.txt")
-  : path.join(ROOT, "pk", "PK.txt");
+// Prefer PK1 (updated) over PK; fallback to PK for backward compatibility
+const PK_FILE = fs.existsSync(path.join(ROOT, "PK1", "PK.txt"))
+  ? path.join(ROOT, "PK1", "PK.txt")
+  : fs.existsSync(path.join(ROOT, "PK", "PK.txt"))
+    ? path.join(ROOT, "PK", "PK.txt")
+    : path.join(ROOT, "pk", "PK.txt");
 
 // Province code to name (GeoNames admin1 FIPS for Pakistan)
 const PROVINCE_NAMES: Record<string, string> = {

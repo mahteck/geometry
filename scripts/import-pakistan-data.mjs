@@ -26,9 +26,12 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 15000,
 });
 
-const PK_FILE = existsSync(join(ROOT, "PK", "PK.txt"))
-  ? join(ROOT, "PK", "PK.txt")
-  : join(ROOT, "pk", "PK.txt");
+// Prefer PK1 (updated) over PK; fallback to PK for backward compatibility
+const PK_FILE = existsSync(join(ROOT, "PK1", "PK.txt"))
+  ? join(ROOT, "PK1", "PK.txt")
+  : existsSync(join(ROOT, "PK", "PK.txt"))
+    ? join(ROOT, "PK", "PK.txt")
+    : join(ROOT, "pk", "PK.txt");
 
 const PROVINCE_NAMES = {
   "01": "Gilgit-Baltistan",
@@ -41,12 +44,16 @@ const PROVINCE_NAMES = {
   "08": "Islamabad",
 };
 
+// Pakistan bounding box (WGS84) - exclude points outside Pakistan (e.g. Afghanistan)
+const PAK_BBOX = { minLon: 60.87, maxLon: 77.84, minLat: 23.69, maxLat: 37.08 };
+
 function parseRow(line) {
   const cols = line.split("\t");
   if (cols.length < 15) return null;
   const lat = parseFloat(cols[4]);
   const lng = parseFloat(cols[5]);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < PAK_BBOX.minLat || lat > PAK_BBOX.maxLat || lng < PAK_BBOX.minLon || lng > PAK_BBOX.maxLon) return null;
   const pop = parseInt(cols[14] || "0", 10) || 0;
   const elev = parseInt(cols[15] || "0", 10) || 0;
   return {
@@ -223,8 +230,9 @@ async function buildDistrictPolygons(client) {
 async function main() {
   console.log("Pakistan Geolocation Import");
   console.log("===========================");
+  console.log(`Data source: ${PK_FILE.replace(ROOT, "").replace(/^[\\/]/, "")}`);
   if (!existsSync(PK_FILE)) {
-    console.error(`ERROR: Data file not found: ${PK_FILE}`);
+    console.error(`ERROR: Data file not found. Expected PK1/PK.txt or PK/PK.txt`);
     process.exit(1);
   }
 

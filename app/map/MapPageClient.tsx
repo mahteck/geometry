@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import SearchPanel, {
+  DEFAULT_FILTERS,
   filterStateToParams,
   paramsToFilterState,
   type FilterState,
@@ -37,6 +39,26 @@ export default function MapPageClient() {
   const [resultCount, setResultCount] = useState<number | null>(null);
   const [validationResult, setValidationResult] = useState<ValidateResponse | null>(null);
 
+  // Once on load: if URL has no params, set URL to defaults so Road Networks (M/H/Intracity) + status=active are applied and Show other / Show big fences toggles work
+  const hasSyncedDefaults = useRef(false);
+  useEffect(() => {
+    if (hasSyncedDefaults.current) return;
+    const hasAnyParam =
+      searchParams.get("search") != null ||
+      searchParams.get("region") != null ||
+      searchParams.get("status") != null ||
+      searchParams.get("routeType") != null ||
+      searchParams.get("minArea") != null ||
+      searchParams.get("maxArea") != null ||
+      searchParams.get("bigOnly") != null;
+    if (!hasAnyParam) {
+      hasSyncedDefaults.current = true;
+      const params = filterStateToParams(DEFAULT_FILTERS);
+      const qs = new URLSearchParams(params).toString();
+      if (qs) router.replace(`/map?${qs}`, { scroll: false });
+    }
+  }, [router, searchParams]);
+
   const hasActiveFilters =
     Object.keys(filterStateToParams(filterState)).length > 0;
 
@@ -54,13 +76,33 @@ export default function MapPageClient() {
     router.push("/map");
   }, [router]);
 
-  const filterParams = {
-    search: filterState.search || undefined,
-    region: filterState.region || undefined,
-    status: filterState.status || undefined,
-    minArea: filterState.minArea || undefined,
-    maxArea: filterState.maxArea || undefined,
-  };
+  const routeTypes: string[] = [];
+  if (filterState.showMotorways) routeTypes.push("motorway");
+  if (filterState.showHighways) routeTypes.push("highway");
+  if (filterState.showIntracity) routeTypes.push("intracity");
+  if (filterState.showOther) routeTypes.push("other");
+  const routeTypeParam = routeTypes.length > 0 ? routeTypes.join(",") : undefined;
+
+  const filterParams = useMemo(
+    () => ({
+      search: filterState.search || undefined,
+      region: filterState.region || undefined,
+      status: filterState.status || undefined,
+      minArea: filterState.minArea || undefined,
+      maxArea: filterState.maxArea || undefined,
+      routeType: routeTypeParam,
+      bigOnly: filterState.showBigFences ? "1" : undefined,
+    }),
+    [
+      filterState.search,
+      filterState.region,
+      filterState.status,
+      filterState.minArea,
+      filterState.maxArea,
+      routeTypeParam,
+      filterState.showBigFences,
+    ]
+  );
 
   const onResultsLoaded = useCallback((features: FenceFeature[]) => {
     setResults(features);
@@ -101,6 +143,10 @@ const invalidFenceIds = useMemo(
   return (
     <div className="flex h-[calc(100vh-3.5rem)] w-full overflow-hidden">
       <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50/80 p-3">
+        <p className="mb-2 text-xs text-slate-500">
+          This map uses the <code className="rounded bg-slate-200 px-1 font-mono">fence</code> table.{" "}
+          <Link href="/gis-map" className="text-blue-600 hover:underline">Enterprise GIS Map</Link> (fences_master + roads, regions) is a separate page.
+        </p>
         <SearchPanel
           filterState={filterState}
           onFilterChange={updateUrl}

@@ -35,8 +35,12 @@ export interface FenceFeature extends GeoJSONFeature {
     name: string;
     address?: string | null;
     city?: string | null;
+    /** lahore | karachi | islamabad | other – from DB or derived from name/city */
+    region?: string | null;
     /** active | inactive – used for styling (green vs gray) */
     status?: string | null;
+    /** motorway | highway | intracity | other – used for route-type styling and filters */
+    routeType?: string | null;
     [key: string]: unknown;
   };
 }

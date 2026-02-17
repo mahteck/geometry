@@ -26,7 +26,7 @@ function sqlSimple(bboxClause: string) {
 
 function sqlExtended(bboxClause: string) {
   return `
-  SELECT f.id, f.name, f.address, f.city,
+  SELECT f.id, f.name, f.address, f.city, f.region,
     ST_AsGeoJSON(d.geom)::json as geometry
   FROM ${FENCES_TABLE} f,
   LATERAL ST_Dump(f.geom) AS d
@@ -45,6 +45,8 @@ interface RowSimple {
 interface RowExtended extends RowSimple {
   address: string | null;
   city: string | null;
+  routeType: string | null;
+  region: string | null;
 }
 
 /** Normalize geometry from DB (handles string/object, driver quirks) */
@@ -58,18 +60,23 @@ function normalizeGeometry(raw: unknown): GeoJSONGeometry | null {
 /** Build one Feature per FENCE (not per row) – groups ST_Dump results by fence ID */
 function toFeatures(rows: RowSimple[] | RowExtended[], extended: boolean): FenceFeature[] {
   // Group rows by fence ID (ST_Dump creates multiple rows per MultiPolygon)
-  const fenceMap = new Map<number, { name: string; address?: string | null; city?: string | null; geometries: GeoJSONGeometry[] }>();
-  
+  const fenceMap = new Map<
+    number,
+    { name: string; address?: string | null; city?: string | null; routeType?: string | null; region?: string | null; geometries: GeoJSONGeometry[] }
+  >();
+
   for (const r of rows) {
     const geometry = normalizeGeometry(r.geometry);
     if (!geometry) continue;
-    
+
     if (!fenceMap.has(r.id)) {
-      const props: { name: string; address?: string | null; city?: string | null } = {
+      const props: { name: string; address?: string | null; city?: string | null; routeType?: string | null; region?: string | null } = {
         name: r.name ?? `Zone_${r.id}`,
       };
       if (extended && "address" in r) props.address = r.address ?? null;
       if (extended && "city" in r) props.city = r.city ?? null;
+      if (extended && "routeType" in r) props.routeType = (r as RowExtended).routeType ?? null;
+      if (extended && "region" in r) props.region = (r as RowExtended).region ?? null;
       fenceMap.set(r.id, { ...props, geometries: [] });
     }
     fenceMap.get(r.id)!.geometries.push(geometry);
@@ -95,11 +102,13 @@ function toFeatures(rows: RowSimple[] | RowExtended[], extended: boolean): Fence
       finalGeometry = { type: "MultiPolygon", coordinates: coords };
     }
 
-    const props: { name: string; address?: string | null; city?: string | null } = {
+    const props: { name: string; address?: string | null; city?: string | null; routeType?: string | null; region?: string | null } = {
       name: data.name,
     };
     if (data.address !== undefined) props.address = data.address;
     if (data.city !== undefined) props.city = data.city;
+    if (data.routeType !== undefined) props.routeType = data.routeType;
+    if (data.region !== undefined) props.region = data.region;
 
     features.push({
       type: "Feature",
@@ -126,6 +135,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const countOnly = searchParams.get("countOnly") === "1";
+    const dedupe = searchParams.get("dedupe");
+    const hasStatusParam =
+      searchParams.get("status") !== null || searchParams.get("active") !== null;
     const bbox = parseBbox(searchParams);
     const bboxClause =
       bbox == null
@@ -135,7 +147,37 @@ export async function GET(request: Request) {
 
     const client = await pool.connect();
     try {
-      const whereTail = `${bboxClause}${filterClauses}`;
+      const statusDefaultClause = hasStatusParam
+        ? ""
+        : " AND COALESCE(f.status, 'active') = 'active'";
+      const dedupeClause =
+        dedupe === "1"
+          ? `
+        AND f.id IN (
+          WITH norm AS (
+            SELECT
+              f2.id,
+              ST_Normalize(
+                ST_SnapToGrid(
+                  ST_MakeValid(f2.geom),
+                  0.000001
+                )
+              ) AS norm_geom
+            FROM ${FENCES_TABLE} f2
+            WHERE f2.geom IS NOT NULL
+          ),
+          groups AS (
+            SELECT
+              md5(ST_AsBinary(norm_geom)) AS geom_key,
+              MIN(id) AS canonical_id
+            FROM norm
+            GROUP BY md5(ST_AsBinary(norm_geom))
+          )
+          SELECT canonical_id AS id FROM groups
+        )`
+          : "";
+
+      const whereTail = `${bboxClause}${filterClauses}${statusDefaultClause}${dedupeClause}`;
       if (countOnly) {
         const r = await client.query<{ count: string }>(
           `SELECT COUNT(*) as count FROM ${FENCES_TABLE} f, LATERAL ST_Dump(f.geom) AS d WHERE f.geom IS NOT NULL ${whereTail}`,
@@ -156,7 +198,7 @@ export async function GET(request: Request) {
   ORDER BY f.id, d.path;
 `;
       const sqlExtendedWithFilter = `
-  SELECT f.id, f.name, f.address, f.city,
+  SELECT f.id, f.name, f.route_type AS "routeType", f.region,
     ST_AsGeoJSON(d.geom)::json as geometry
   FROM ${FENCES_TABLE} f,
   LATERAL ST_Dump(f.geom) AS d

@@ -26,8 +26,10 @@ export interface MapViewFilterParams {
   search?: string;
   region?: string;
   status?: string;
+  routeType?: string;
   minArea?: string;
   maxArea?: string;
+  bigOnly?: string;
 }
 
 export interface MapViewHandle {
@@ -262,7 +264,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
         const urlParams = new URLSearchParams();
         const fp = filterParamsRef.current;
         const hasFilters = Boolean(
-          fp?.search?.trim() || fp?.region || fp?.status || fp?.minArea || fp?.maxArea
+          fp?.search?.trim() || fp?.region || fp?.status || fp?.routeType || fp?.minArea || fp?.maxArea || fp?.bigOnly
         );
         /* When user has search/filters, load all matching fences (no bbox). Otherwise use viewport. */
         if (opts.viewportOnly && !hasFilters) {
@@ -276,11 +278,15 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
           const maxLat = Math.min(90, ne.lat + pad);
           urlParams.set("bbox", `${minLng},${minLat},${maxLng},${maxLat}`);
         }
+        // Always request de-duplicated, sanitized fences for map rendering
+        urlParams.set("dedupe", "1");
         if (fp?.search?.trim()) urlParams.set("search", fp.search.trim());
         if (fp?.region) urlParams.set("region", fp.region);
         if (fp?.status) urlParams.set("status", fp.status);
+        if (fp?.routeType) urlParams.set("routeType", fp.routeType);
         if (fp?.minArea) urlParams.set("minArea", fp.minArea);
         if (fp?.maxArea) urlParams.set("maxArea", fp.maxArea);
+        if (fp?.bigOnly) urlParams.set("bigOnly", fp.bigOnly);
         const qs = urlParams.toString();
         if (qs) url += `?${qs}`;
         const res = await fetch(url);
@@ -781,9 +787,10 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
 
-      {!loading && !error && (
+      {/* Legend and left panel always visible so they don't flicker when loading */}
+      {!error && (
         <>
-          <div className="absolute bottom-4 right-4 top-auto z-[1000] max-h-[calc(100vh-8rem)] overflow-y-auto">
+          <div className="absolute bottom-4 right-4 top-auto z-[1000] max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200/80 bg-white/95 shadow-lg backdrop-blur">
             <MapLegend />
           </div>
           <div className="absolute bottom-4 left-4 z-[1000] flex flex-col gap-3">

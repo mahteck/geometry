@@ -40,17 +40,11 @@ export function buildFilterClauses(
     clauses.push(`(f.name ILIKE $${idx})`);
   }
 
-  const region = searchParams.get("region")?.toLowerCase();
-  if (region && ["lahore", "karachi", "islamabad", "other"].includes(region)) {
-    if (region === "other") {
-      clauses.push(
-        `(f.name NOT ILIKE '%lahore%' AND f.name NOT ILIKE '%karachi%' AND f.name NOT ILIKE '%islamabad%')`
-      );
-    } else {
-      idx++;
-      params.push(`%${region}%`);
-      clauses.push(`(f.name ILIKE $${idx})`);
-    }
+  const region = searchParams.get("region")?.trim();
+  if (region && region.length > 0) {
+    idx++;
+    params.push(region);
+    clauses.push(`(TRIM(COALESCE(f.region, '')) = $${idx})`);
   }
 
   const statusParam = searchParams.get("status") ?? searchParams.get("active");
@@ -64,6 +58,19 @@ export function buildFilterClauses(
       idx++;
       params.push("inactive");
       clauses.push(`COALESCE(f.status, '') = $${idx}`);
+    }
+  }
+
+  const routeTypeParam = searchParams.get("routeType") ?? searchParams.get("route_type");
+  if (routeTypeParam) {
+    const types = routeTypeParam
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => ["motorway", "highway", "intracity", "other"].includes(s));
+    if (types.length > 0) {
+      idx++;
+      params.push(types);
+      clauses.push(`LOWER(COALESCE(f.route_type, '')) = ANY($${idx}::text[])`);
     }
   }
 
@@ -85,6 +92,11 @@ export function buildFilterClauses(
       params.push(n);
       clauses.push(`ST_Area(d.geom::geography) <= $${idx}`);
     }
+  }
+
+  const bigOnly = searchParams.get("bigOnly");
+  if (bigOnly === "1" || bigOnly === "true") {
+    clauses.push("ST_Area(d.geom::geography) >= 50000000");
   }
 
   const clauseStr = clauses.length ? ` AND ${clauses.join(" AND ")}` : "";

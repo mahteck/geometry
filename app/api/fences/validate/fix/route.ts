@@ -15,7 +15,13 @@ export async function POST(request: Request) {
     try {
       const result = await client.query<{ id: number }>(
         `UPDATE ${FENCES_TABLE}
-         SET geom = ST_MakeValid(geom)
+         SET geom = ST_GeometryN(
+           ST_CollectionExtract(
+             ST_MakeValid(geom),
+             3 -- Polygon geometries
+           ),
+           1 -- first polygon from the collection
+         )
          WHERE id = ANY($1::int[])
          RETURNING id`,
         [ids]

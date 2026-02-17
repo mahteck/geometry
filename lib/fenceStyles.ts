@@ -4,13 +4,27 @@
 
 import type { FenceFeature, GeoJSONGeometry } from "@/types/fence";
 
-/** Region-based colors (by fence name or city) */
-export const REGION_COLORS = {
-  lahore: "#22c55e",
-  karachi: "#3b82f6",
-  islamabad: "#a855f7",
-  other: "#f97316",
-} as const;
+/** Region = actual province name (from lat/long). Colors per province. Lahore/Karachi = legacy name-based. */
+export const REGION_COLORS: Record<string, string> = {
+  Punjab: "#22c55e",
+  Sindh: "#3b82f6",
+  "Khyber Pakhtunkhwa": "#d97706",
+  Balochistan: "#059669",
+  "Gilgit-Baltistan": "#0ea5e9",
+  "Azad Jammu and Kashmir": "#7c3aed",
+  Islamabad: "#a855f7",
+  Other: "#64748b",
+  Lahore: "#22c55e",
+  Karachi: "#3b82f6",
+};
+
+export type RegionKey = string;
+
+/** Map DB region string to color (exact name or normalized). */
+function getRegionColor(regionName: string): string {
+  const key = regionName?.trim() || "Other";
+  return REGION_COLORS[key] ?? REGION_COLORS["Other"] ?? "#64748b";
+}
 
 /** Status-based overrides */
 export const STATUS_COLORS = {
@@ -18,22 +32,15 @@ export const STATUS_COLORS = {
   inactive: "#94a3b8",
 } as const;
 
-export type RegionKey = keyof typeof REGION_COLORS;
-
-/** Determine region from fence name or city (case-insensitive match). */
+/** Determine region key (for color) from properties.region (actual province name from lat/long). */
 export function getRegionFromFence(feat: FenceFeature): RegionKey {
-  const name = (feat.properties?.name ?? "").toString().toLowerCase();
-  const city = (feat.properties?.city ?? "").toString().toLowerCase();
-  const combined = `${name} ${city}`;
-  if (/\blahore\b/.test(combined)) return "lahore";
-  if (/\bkarachi\b/.test(combined)) return "karachi";
-  if (/\bislamabad\b/.test(combined)) return "islamabad";
-  return "other";
+  const region = (feat.properties as { region?: string | null } | undefined)?.region;
+  return (region && String(region).trim()) || "Other";
 }
 
 /** Get base fill color by region. */
 export function getColorByRegion(feat: FenceFeature): string {
-  return REGION_COLORS[getRegionFromFence(feat)];
+  return getRegionColor(getRegionFromFence(feat));
 }
 
 /** Get status from properties (active | inactive | undefined). */
@@ -85,6 +92,8 @@ export interface FenceStyleOptions {
   fillOpacity: number;
   strokeWeight?: number;
   strokeColor?: string;
+  /** When true, route-type polygons use higher opacity and thicker stroke for clarity */
+  emphasizeRouteType?: boolean;
 }
 
 export interface FenceStyleResult {
@@ -92,6 +101,30 @@ export interface FenceStyleResult {
   fillOpacity: number;
   color: string;
   weight: number;
+}
+
+/** Route-type colors – vivid and distinct for clarity when overlapping */
+export const ROUTE_TYPE_COLORS = {
+  motorway: "#059669",
+  highway: "#2563eb",
+  intracity: "#7c3aed",
+  other: "#b45309",
+} as const;
+
+export type RouteTypeKey = keyof typeof ROUTE_TYPE_COLORS;
+
+export function getRouteTypeFromFence(
+  feat: FenceFeature
+): RouteTypeKey | undefined {
+  const rt = (feat.properties as { routeType?: string | null } | undefined)
+    ?.routeType;
+  if (!rt) return undefined;
+  const lower = String(rt).toLowerCase().trim();
+  if (lower === "motorway") return "motorway";
+  if (lower === "highway") return "highway";
+  if (lower === "intracity") return "intracity";
+  if (lower === "other") return "other";
+  return undefined;
 }
 
 /**
@@ -102,11 +135,19 @@ export function getStyleForFence(
   feat: FenceFeature,
   options: FenceStyleOptions
 ): FenceStyleResult {
-  const { fillOpacity, strokeWeight = 1.5, strokeColor = "#1e293b" } = options;
+  const { fillOpacity, strokeWeight = 1.5, strokeColor = "#1e293b", emphasizeRouteType = true } = options;
   let fillColor: string;
+  let color = strokeColor;
+  let weight = strokeWeight;
 
   const status = getStatusFromFence(feat);
-  if (status !== undefined) {
+  const routeType = getRouteTypeFromFence(feat);
+
+  if (routeType !== undefined) {
+    fillColor = ROUTE_TYPE_COLORS[routeType];
+    color = darkenHex(fillColor, routeType === "other" ? 0.25 : 0.15);
+    if (emphasizeRouteType) weight = Math.max(weight, 2);
+  } else if (status !== undefined) {
     fillColor = STATUS_COLORS[status];
   } else {
     fillColor = getColorByRegion(feat);
@@ -115,23 +156,39 @@ export function getStyleForFence(
     if (darken > 0) fillColor = darkenHex(fillColor, darken);
   }
 
+  const effectiveOpacity =
+    routeType !== undefined && emphasizeRouteType
+      ? Math.max(fillOpacity, routeType === "other" ? 0.28 : 0.42)
+      : fillOpacity;
+
   return {
     fillColor,
-    fillOpacity,
-    color: strokeColor,
-    weight: strokeWeight,
+    fillOpacity: effectiveOpacity,
+    color,
+    weight,
   };
 }
 
-/** Legend items for region colors (for MapLegend). */
-export const REGION_LEGEND_ITEMS: { key: RegionKey; label: string; color: string }[] = [
-  { key: "lahore", label: "Lahore", color: REGION_COLORS.lahore },
-  { key: "karachi", label: "Karachi", color: REGION_COLORS.karachi },
-  { key: "islamabad", label: "Islamabad", color: REGION_COLORS.islamabad },
-  { key: "other", label: "Other", color: REGION_COLORS.other },
+/** Legend items for region colors (for MapLegend) – actual province names. */
+export const REGION_LEGEND_ITEMS: { key: string; label: string; color: string }[] = [
+  { key: "Punjab", label: "Punjab", color: REGION_COLORS.Punjab },
+  { key: "Sindh", label: "Sindh", color: REGION_COLORS.Sindh },
+  { key: "Khyber Pakhtunkhwa", label: "Khyber Pakhtunkhwa", color: REGION_COLORS["Khyber Pakhtunkhwa"] },
+  { key: "Balochistan", label: "Balochistan", color: REGION_COLORS.Balochistan },
+  { key: "Gilgit-Baltistan", label: "Gilgit-Baltistan", color: REGION_COLORS["Gilgit-Baltistan"] },
+  { key: "Azad Jammu and Kashmir", label: "Azad Jammu & Kashmir", color: REGION_COLORS["Azad Jammu and Kashmir"] },
+  { key: "Islamabad", label: "Islamabad", color: REGION_COLORS.Islamabad },
+  { key: "Other", label: "Other", color: REGION_COLORS.Other },
 ];
 
 export const STATUS_LEGEND_ITEMS: { key: "active" | "inactive"; label: string; color: string }[] = [
   { key: "active", label: "Active", color: STATUS_COLORS.active },
   { key: "inactive", label: "Inactive", color: STATUS_COLORS.inactive },
+];
+
+export const ROUTE_TYPE_LEGEND_ITEMS: { key: RouteTypeKey; label: string; color: string }[] = [
+  { key: "motorway", label: "Motorway", color: ROUTE_TYPE_COLORS.motorway },
+  { key: "highway", label: "Highway", color: ROUTE_TYPE_COLORS.highway },
+  { key: "intracity", label: "Intracity", color: ROUTE_TYPE_COLORS.intracity },
+  { key: "other", label: "Other (regional)", color: ROUTE_TYPE_COLORS.other },
 ];

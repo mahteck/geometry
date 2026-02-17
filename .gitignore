@@ -36,3 +36,6 @@ next-env.d.ts
 
 # transform output
 /scripts/output/
+
+# large data files (keep out of git)
+*.osm.pbf
