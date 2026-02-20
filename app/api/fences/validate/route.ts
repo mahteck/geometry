@@ -161,17 +161,25 @@ export async function GET() {
           WITH pak_boundary AS (
             SELECT ST_Union(geom) AS geom FROM pakistan_provinces WHERE geom IS NOT NULL
           ),
-          snapped AS (
+          fence_snapped AS (
             SELECT f.id, f.geom,
-              ST_SnapToGrid(ST_MakeValid(f.geom), 0.00001) AS f_snap,
-              ST_SnapToGrid(ST_MakeValid(b.geom), 0.00001) AS b_snap
-            FROM ${FENCES_TABLE} f, pak_boundary b
+              ST_SnapToGrid(ST_MakeValid(f.geom), 0.00001) AS f_snap
+            FROM ${FENCES_TABLE} f
             WHERE f.geom IS NOT NULL
+          ),
+          coverage AS (
+            SELECT fs.id,
+              NOT ST_Intersects(fs.f_snap, b.geom) AS outside_pakistan,
+              ST_Intersects(fs.f_snap, b.geom) AND NOT ST_Covers(b.geom, fs.f_snap) AS not_covered,
+              CASE WHEN ST_Area(fs.f_snap::geography) > 0
+                THEN ST_Area(ST_Intersection(fs.f_snap, b.geom)::geography) / ST_Area(fs.f_snap::geography)
+                ELSE 0 END AS area_ratio
+            FROM fence_snapped fs, pak_boundary b
           )
-          SELECT s.id,
-            NOT ST_Intersects(s.f_snap, s.b_snap) AS outside_pakistan,
-            (ST_Intersects(s.f_snap, s.b_snap) AND NOT ST_Covers(s.b_snap, s.f_snap)) AS extends_outside
-          FROM snapped s
+          SELECT c.id,
+            c.outside_pakistan,
+            (c.not_covered AND (c.area_ratio IS NULL OR c.area_ratio < 0.99)) AS extends_outside
+          FROM coverage c
         `;
         const pakRes = await client.query<{ id: number; outside_pakistan: boolean; extends_outside: boolean }>(pakSql);
         pakistanMap = new Map(
