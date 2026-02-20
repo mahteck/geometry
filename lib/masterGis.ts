@@ -51,7 +51,7 @@ export function buildFencesFilterClauses(
     if (s === "active" || s === "inactive") {
       idx++;
       params.push(s);
-      clauses.push(`(f.status = $${idx})`);
+      clauses.push(`(LOWER(TRIM(COALESCE(f.status, ''))) = LOWER($${idx}))`);
     }
   }
 
@@ -68,11 +68,11 @@ export function buildFencesFilterClauses(
     }
   }
 
-  const regionName = searchParams.get("region_name") ?? searchParams.get("region");
-  if (regionName?.trim()) {
+  const regionName = (searchParams.get("region_name") ?? searchParams.get("region"))?.trim();
+  if (regionName) {
     idx++;
-    params.push(regionName.trim());
-    clauses.push(`(TRIM(COALESCE(f.region_name, '')) = $${idx})`);
+    params.push(regionName);
+    clauses.push(`(LOWER(TRIM(COALESCE(f.region_name, ''))) = LOWER(TRIM($${idx})))`);
   }
 
   const isBig = searchParams.get("is_big") ?? searchParams.get("bigOnly");

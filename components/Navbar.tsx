@@ -6,8 +6,11 @@ import { usePathname } from "next/navigation";
 const nav = [
   { href: "/", label: "Home" },
   { href: "/map", label: "Fence Map" },
-  { href: "/pakistan-map", label: "Pakistan Map" },
-  { href: "/pakistan-dashboard", label: "Dashboard" },
+  { href: "/gis-map", label: "Enterprise GIS Map" },
+  { href: "/docs", label: "Documentation" },
+  // Pakistan Map and Dashboard hidden for now (uncomment when needed)
+  // { href: "/pakistan-map", label: "Pakistan Map" },
+  // { href: "/pakistan-dashboard", label: "Dashboard" },
 ];
 
 export default function Navbar() {

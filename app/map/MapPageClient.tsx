@@ -109,15 +109,23 @@ export default function MapPageClient() {
     setResultCount(features.length);
   }, []);
 
+  const [selectedFenceId, setSelectedFenceId] = useState<number | null>(null);
+
   const onZoomToFeature = useCallback((feat: FenceFeature) => {
+    const id = feat.id != null ? Number(feat.id) : null;
+    setSelectedFenceId(id);
     mapRef.current?.zoomToFeature(feat);
   }, []);
 
-const invalidFenceIds = useMemo(
+  const onClearSelection = useCallback(() => {
+    setSelectedFenceId(null);
+  }, []);
+
+const isInvalidForMap = (i: { isValid: boolean; isSimple: boolean; hasUnclosedRing: boolean; hasDuplicateVertices: boolean; outsidePakistan?: boolean; extendsOutsidePakistan?: boolean }) =>
+    !i.isValid || !i.isSimple || i.hasUnclosedRing || i.hasDuplicateVertices || !!i.outsidePakistan || !!i.extendsOutsidePakistan;
+  const invalidFenceIds = useMemo(
     () =>
-      validationResult?.issues
-        .filter((i) => !i.isValid || !i.isSimple || i.hasUnclosedRing || i.hasDuplicateVertices)
-        .map((i) => i.fenceId) ?? [],
+      validationResult?.issues.filter(isInvalidForMap).map((i) => i.fenceId) ?? [],
     [validationResult]
   );
   const invalidIssueMap = useMemo(
@@ -125,7 +133,7 @@ const invalidFenceIds = useMemo(
       validationResult
         ? Object.fromEntries(
             validationResult.issues
-              .filter((i) => !i.isValid || !i.isSimple || i.hasUnclosedRing || i.hasDuplicateVertices)
+              .filter(isInvalidForMap)
               .map((i) => [
                 i.fenceId,
                 {
@@ -133,6 +141,9 @@ const invalidFenceIds = useMemo(
                   isSimple: i.isSimple,
                   hasUnclosedRing: i.hasUnclosedRing,
                   hasDuplicateVertices: i.hasDuplicateVertices,
+                  outsidePakistan: i.outsidePakistan,
+                  extendsOutsidePakistan: i.extendsOutsidePakistan,
+                  pointCount: i.pointCount,
                 },
               ])
           )
@@ -155,6 +166,8 @@ const invalidFenceIds = useMemo(
           onZoomToFeature={onZoomToFeature}
           onClearFilters={onClearFilters}
           hasActiveFilters={hasActiveFilters}
+          selectedFenceId={selectedFenceId}
+          onClearSelection={onClearSelection}
         />
         <div className="mt-3">
           <ExportPanel
@@ -178,6 +191,7 @@ const invalidFenceIds = useMemo(
           ref={mapRef}
           filterParams={filterParams}
           onResultsLoaded={onResultsLoaded}
+          selectedFenceId={selectedFenceId}
           invalidFenceIds={invalidFenceIds}
           invalidIssueMap={invalidIssueMap}
         />

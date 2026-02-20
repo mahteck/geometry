@@ -17,6 +17,12 @@ export interface ValidationIssue {
   duplicateOfId: number | null;
   /** Total fences in this normalized-geometry group (including canonical). */
   duplicateGroupSize: number;
+  /** True when fence geometry is entirely outside Pakistan boundary. */
+  outsidePakistan?: boolean;
+  /** True when fence geometry extends outside Pakistan (partial overlap). */
+  extendsOutsidePakistan?: boolean;
+  /** Total vertex count (ST_NPoints) for this fence geometry. */
+  pointCount?: number;
 }
 
 export interface ValidateResponse {
@@ -34,6 +40,7 @@ interface Row {
   simple: boolean;
   duplicate_group_size: number | null;
   canonical_id: number | null;
+  point_count: number | null;
 }
 
 function parseGeometry(raw: unknown): GeoJSONGeometry | null {
@@ -110,6 +117,7 @@ export async function GET() {
             ST_IsValid(f.geom) AS valid,
             ST_IsValidReason(f.geom) AS valid_reason,
             ST_IsSimple(f.geom) AS simple,
+            ST_NPoints(f.geom) AS point_count,
             -- Normalize geometry so duplicates can be detected robustly
             ST_Normalize(
               ST_SnapToGrid(
@@ -136,7 +144,8 @@ export async function GET() {
           n.valid_reason,
           n.simple,
           COALESCE(g.group_size, 1) AS duplicate_group_size,
-          g.canonical_id
+          g.canonical_id,
+          n.point_count
         FROM norm n
         LEFT JOIN groups g
           ON md5(ST_AsBinary(n.norm_geom)) = g.geom_key
@@ -144,6 +153,36 @@ export async function GET() {
       `;
       const r = await client.query<Row>(sql);
       const rows = r.rows;
+
+      // Pakistan boundary check: which fences are outside or extend outside
+      let pakistanMap: Map<number, { outsidePakistan: boolean; extendsOutsidePakistan: boolean }> = new Map();
+      try {
+        const pakSql = `
+          WITH pak_boundary AS (
+            SELECT ST_Union(geom) AS geom FROM pakistan_provinces WHERE geom IS NOT NULL
+          ),
+          snapped AS (
+            SELECT f.id, f.geom,
+              ST_SnapToGrid(ST_MakeValid(f.geom), 0.00001) AS f_snap,
+              ST_SnapToGrid(ST_MakeValid(b.geom), 0.00001) AS b_snap
+            FROM ${FENCES_TABLE} f, pak_boundary b
+            WHERE f.geom IS NOT NULL
+          )
+          SELECT s.id,
+            NOT ST_Intersects(s.f_snap, s.b_snap) AS outside_pakistan,
+            (ST_Intersects(s.f_snap, s.b_snap) AND NOT ST_Covers(s.b_snap, s.f_snap)) AS extends_outside
+          FROM snapped s
+        `;
+        const pakRes = await client.query<{ id: number; outside_pakistan: boolean; extends_outside: boolean }>(pakSql);
+        pakistanMap = new Map(
+          pakRes.rows.map((row) => [
+            row.id,
+            { outsidePakistan: row.outside_pakistan, extendsOutsidePakistan: row.extends_outside },
+          ])
+        );
+      } catch {
+        // pakistan_provinces may not exist; treat all as within Pakistan
+      }
 
       const issues: ValidationIssue[] = [];
       for (const row of rows) {
@@ -155,8 +194,11 @@ export async function GET() {
         const isDuplicate = groupSize > 1;
         const isCanonical = row.id === canonicalId;
         const duplicateOfId = isDuplicate && !isCanonical ? canonicalId : null;
+        const pak = pakistanMap.get(row.id);
+        const outsidePakistan = pak?.outsidePakistan ?? false;
+        const extendsOutsidePakistan = pak?.extendsOutsidePakistan ?? false;
         const invalid =
-          !row.valid || !row.simple || hasUnclosed || hasDupVerts;
+          !row.valid || !row.simple || hasUnclosed || hasDupVerts || outsidePakistan || extendsOutsidePakistan;
 
         issues.push({
           fenceId: row.id,
@@ -169,11 +211,20 @@ export async function GET() {
           isDuplicate,
           duplicateOfId,
           duplicateGroupSize: groupSize,
+          outsidePakistan,
+          extendsOutsidePakistan,
+          pointCount: row.point_count ?? undefined,
         });
       }
 
       const invalidCount = issues.filter(
-        (i) => !i.isValid || !i.isSimple || i.hasUnclosedRing || i.hasDuplicateVertices
+        (i) =>
+          !i.isValid ||
+          !i.isSimple ||
+          i.hasUnclosedRing ||
+          i.hasDuplicateVertices ||
+          i.outsidePakistan ||
+          i.extendsOutsidePakistan
       ).length;
       const validCount = issues.length - invalidCount;
 

@@ -98,6 +98,15 @@ export async function GET(request: Request) {
     const where = `WHERE f.geom IS NOT NULL ${bboxWhere}${filterClauses}`;
     const params = [...filterParams];
 
+    const simplifyParam = searchParams.get("simplify");
+    const tolerance = typeof simplifyParam === "string" ? parseFloat(simplifyParam) : NaN;
+    const useSimplify = Number.isFinite(tolerance) && tolerance > 0 && tolerance < 1;
+    if (useSimplify) params.push(tolerance);
+    const geomSelectExpr =
+      useSimplify && params.length > 0
+        ? `ST_AsGeoJSON(ST_SimplifyPreserveTopology(f.geom, $${params.length}))::json`
+        : "ST_AsGeoJSON(f.geom)::json";
+
     const client = await pool.connect();
     try {
       if (countOnly) {
@@ -111,7 +120,7 @@ export async function GET(request: Request) {
 
       const sql = `
         SELECT f.id, f.name, f.fence_type, f.route_type, f.region_name, f.status, f.area_size, f.is_big,
-          ST_AsGeoJSON(f.geom)::json AS geometry
+          ${geomSelectExpr} AS geometry
         FROM ${FENCES} f
         ${where}
         ORDER BY f.id

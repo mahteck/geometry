@@ -6,6 +6,7 @@
 
 const FENCE_ACTIVE_COLOR = "#3b82f6";
 const FENCE_INACTIVE_COLOR = "#94a3b8";
+const FENCE_OUT_OF_BOUNDS_COLOR = "#ef4444";
 const ROAD_MOTORWAY_COLOR = "#dc2626";
 const ROAD_TRUNK_PRIMARY_COLOR = "#ea580c";
 const ROAD_SECONDARY_COLOR = "#eab308";
@@ -37,6 +38,13 @@ export default function GisMapLegend() {
           <span className="text-slate-700">Inactive</span>
         </li>
         <li className="text-xs text-slate-500">Thick border = big fence (&gt; 50 km²)</li>
+        <li className="flex items-center gap-2">
+          <span
+            className="inline-block h-3.5 w-3.5 shrink-0 rounded border border-red-800"
+            style={{ backgroundColor: FENCE_OUT_OF_BOUNDS_COLOR, opacity: 0.9 }}
+          />
+          <span className="text-slate-700">Red = outside Pakistan or extends outside boundary</span>
+        </li>
       </ul>
 
       <p className="mb-1 mt-3 text-xs font-medium text-slate-500">Roads</p>

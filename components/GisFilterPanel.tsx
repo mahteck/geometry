@@ -78,6 +78,10 @@ export interface GisFilterPanelProps {
   onZoomToFeature: (feat: FenceMasterFeature) => void;
   onClearFilters: () => void;
   hasActiveFilters: boolean;
+  /** When set, this fence is shown as selected in the list and highlighted on the map */
+  selectedFenceId?: number | null;
+  /** Call to clear selection and show all fences again on the map */
+  onClearSelection?: () => void;
 }
 
 export default function GisFilterPanel({
@@ -88,6 +92,8 @@ export default function GisFilterPanel({
   onZoomToFeature,
   onClearFilters,
   hasActiveFilters,
+  selectedFenceId = null,
+  onClearSelection,
 }: GisFilterPanelProps) {
   const set = useCallback(
     (patch: Partial<GisFilterState>) => {
@@ -113,7 +119,7 @@ export default function GisFilterPanel({
       </h2>
 
       <div>
-        <label className="mb-1 block text-xs font-medium text-slate-500">Search by name</label>
+        <label className="mb-1 block text-xs font-medium text-slate-500">Search Fence</label>
         <input
           type="text"
           value={filterState.search}
@@ -204,20 +210,32 @@ export default function GisFilterPanel({
       )}
 
       <div className="border-t border-slate-200 pt-2">
+        {selectedFenceId != null && onClearSelection && (
+          <button
+            type="button"
+            onClick={onClearSelection}
+            className="mb-2 w-full rounded border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+          >
+            Show all fences
+          </button>
+        )}
         <p className="text-xs font-medium text-slate-600">
           {resultCount != null ? `Fences: ${resultCount}` : "Fences: —"}
         </p>
         {results.length > 0 && (
           <ul className="mt-2 max-h-48 overflow-y-auto rounded border border-slate-200 bg-slate-50/80">
-            {results.slice(0, 100).map((feat) => {
+            {results.slice(0, 100).map((feat, index) => {
               const name = feat.properties?.name ?? `Zone_${feat.id}`;
               const routeType = feat.properties?.route_type ?? "";
+              const isSelected =
+                selectedFenceId != null &&
+                (selectedFenceId === feat.id || String(selectedFenceId) === String(feat.id));
               return (
-                <li key={feat.id}>
+                <li key={feat.id != null ? `f-${feat.id}-${index}` : `f-${index}`}>
                   <button
                     type="button"
                     onClick={() => onZoomToFeature(feat)}
-                    className="w-full px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-blue-100 hover:text-blue-800"
+                    className={`w-full px-2.5 py-1.5 text-left text-sm hover:bg-blue-100 hover:text-blue-800 ${isSelected ? "border-l-4 border-blue-500 bg-blue-100 font-medium text-slate-900" : "text-slate-700"}`}
                   >
                     {name}{" "}
                     <span className="text-slate-400">

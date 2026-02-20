@@ -46,11 +46,18 @@ export interface MapViewValidationIssue {
   isSimple: boolean;
   hasUnclosedRing: boolean;
   hasDuplicateVertices: boolean;
+  outsidePakistan?: boolean;
+  extendsOutsidePakistan?: boolean;
+  pointCount?: number;
 }
+
+const HIDDEN_STYLE = { fillOpacity: 0, opacity: 0, weight: 0 };
 
 export interface MapViewProps {
   filterParams?: MapViewFilterParams;
   onResultsLoaded?: (features: FenceFeature[]) => void;
+  /** When set, only this fence is shown on the map (single-fence view) */
+  selectedFenceId?: number | null;
   /** Fence IDs with validation issues (highlighted in red) */
   invalidFenceIds?: number[];
   /** Validation details per fence (shown in popup) */
@@ -134,12 +141,15 @@ function validationPopupHtml(issue: MapViewValidationIssue): string {
   if (!issue.isSimple) parts.push("Self-intersection");
   if (issue.hasUnclosedRing) parts.push("Unclosed polygon");
   if (issue.hasDuplicateVertices) parts.push("Duplicate vertices");
-  if (parts.length === 0) return "";
+  if (issue.outsidePakistan) parts.push("Outside Pakistan");
+  if (issue.extendsOutsidePakistan) parts.push("Extends outside Pakistan");
+  if (parts.length === 0 && issue.pointCount == null) return "";
+  if (issue.pointCount != null) parts.push(`Points: ${issue.pointCount}`);
   return `<div class="mt-2 border-t border-red-200 pt-2 text-xs text-red-700"><strong>Validation:</strong> ${parts.join(" · ")}</div>`;
 }
 
 const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
-  { filterParams, onResultsLoaded, invalidFenceIds, invalidIssueMap },
+  { filterParams, onResultsLoaded, selectedFenceId, invalidFenceIds, invalidIssueMap },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -176,6 +186,8 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
   const fetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const viewportOnlyRef = useRef(true);
   const runFetchRef = useRef<() => void>(() => {});
+  const selectedFenceIdRef = useRef<number | null>(null);
+  selectedFenceIdRef.current = selectedFenceId ?? null;
 
   setShowEditPopupRef.current = setShowEditPopup;
   viewportOnlyRef.current = viewportOnly;
@@ -184,10 +196,35 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     zoomToFeature(feat: FenceFeature) {
       const map = mapRef.current;
       const L = leafletRef.current;
+      const drawnItems = drawnItemsRef.current;
       if (!L) return;
       const bounds = getBoundsFromFeature(feat, L);
       if (map && bounds) {
         map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16 });
+      }
+      if (drawnItems) {
+        if (highlightedLayerRef.current?._baseStyle) {
+          highlightedLayerRef.current.setStyle(highlightedLayerRef.current._baseStyle);
+        }
+        highlightedLayerRef.current = null;
+        setHighlighted(false);
+        drawnItems.eachLayer((l) => {
+          const poly = l as FenceLayer;
+          const match = poly._fenceId != null && (poly._fenceId === feat.id || String(poly._fenceId) === String(feat.id));
+          if (match) {
+            highlightedLayerRef.current = poly;
+            setHighlighted(true);
+            if (poly._baseStyle) {
+              poly.setStyle({
+                fillColor: poly._baseStyle.fillColor,
+                fillOpacity: FILL_OPACITY_HIGHLIGHT,
+                color: poly._baseStyle.color,
+                weight: STROKE_WEIGHT_SELECTED,
+              });
+            }
+            poly.bringToFront();
+          }
+        });
       }
     },
     getBounds() {
@@ -556,6 +593,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     doFetch();
 
     const onMoveEnd = () => {
+      if (selectedFenceIdRef.current != null) return;
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
       fetchTimeoutRef.current = setTimeout(() => {
         if (viewportOnlyRef.current) doFetch();
@@ -589,14 +627,60 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
 
   useEffect(() => {
     const drawnItems = drawnItemsRef.current;
+    const map = mapRef.current;
+    const sid = selectedFenceId;
+    if (!drawnItems) return;
+    if (sid == null) {
+      highlightedLayerRef.current = null;
+      setHighlighted(false);
+      drawnItems.eachLayer((l) => {
+        const poly = l as FenceLayer;
+        if (poly._baseStyle) poly.setStyle(poly._baseStyle);
+      });
+      return;
+    }
+    let found: FenceLayer | null = null;
+    drawnItems.eachLayer((l) => {
+      const poly = l as FenceLayer;
+      const match = poly._fenceId != null && (poly._fenceId === sid || String(poly._fenceId) === String(sid));
+      if (match) {
+        found = poly;
+        if (poly._baseStyle) {
+          poly.setStyle({
+            fillColor: poly._baseStyle.fillColor,
+            fillOpacity: FILL_OPACITY_HIGHLIGHT,
+            color: poly._baseStyle.color,
+            weight: STROKE_WEIGHT_SELECTED,
+          });
+        }
+        poly.bringToFront();
+        highlightedLayerRef.current = poly;
+        setHighlighted(true);
+      } else {
+        poly.setStyle(HIDDEN_STYLE);
+      }
+    });
+    if (found && map) {
+      const b = (found as L.Polygon).getBounds?.();
+      if (b) map.fitBounds(b, { padding: [24, 24], maxZoom: 16 });
+    }
+  }, [selectedFenceId]);
+
+  useEffect(() => {
+    const drawnItems = drawnItemsRef.current;
     const editGroup = editGroupRef.current;
     const ids = invalidFenceIds ?? [];
     const issueMap = invalidIssueMap ?? {};
+    const sid = selectedFenceId;
     if (!drawnItems && !editGroup) return;
     const updateLayer = (poly: FenceLayer) => {
       const feat = poly._feature;
       const fid = poly._fenceId;
       if (fid == null || !feat) return;
+      if (sid != null && fid !== sid && String(fid) !== String(sid)) {
+        poly.setStyle(HIDDEN_STYLE);
+        return;
+      }
       const isInvalid = ids.includes(fid);
       const baseStyle = isInvalid
         ? { fillColor: INVALID_FILL, fillOpacity: FILL_OPACITY, color: INVALID_STROKE, weight: STROKE_WEIGHT }
@@ -611,7 +695,7 @@ const MapView = forwardRef<MapViewHandle, MapViewProps>(function MapView(
     };
     drawnItems?.eachLayer((l) => updateLayer(l as FenceLayer));
     editGroup?.eachLayer((l) => updateLayer(l as FenceLayer));
-  }, [invalidFenceIds, invalidIssueMap]);
+  }, [invalidFenceIds, invalidIssueMap, selectedFenceId]);
 
   const handleSaveEdits = async () => {
     const layers = saveCancelLayersRef.current;

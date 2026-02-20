@@ -19,6 +19,9 @@
     "classify:fences-master:region": "node scripts/classify-fences-master-region.mjs",
     "classify:fences-master:route-type": "node scripts/classify-fences-master-route-type.mjs",
     "clip:fences:pakistan": "node scripts/clip-fences-to-pakistan.mjs",
+    "clip:fences:pakistan:simplify": "node scripts/clip-fences-to-pakistan.mjs --simplify",
+    "review:fences:pakistan": "node scripts/review-fence-tables-pakistan.mjs",
+    "sync:fence-tables:mfm": "node scripts/sync-fence-tables-to-mfm.mjs",
     "db:migrate": "node scripts/run-migrations.mjs",
     "osm:import": "node scripts/run-osm-import.mjs",
     "pbf:import": "node scripts/import-pbf-to-tables.mjs"
@@ -33,6 +36,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
+    "react-markdown": "^10.1.0",
     "recharts": "^2.15.4",
     "xlsx": "^0.18.5"
   },

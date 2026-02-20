@@ -18,7 +18,10 @@ function issueLabels(issue: ValidationIssue): string[] {
   if (!issue.isSimple) labels.push("Self-intersection");
   if (issue.hasUnclosedRing) labels.push("Unclosed polygon");
   if (issue.hasDuplicateVertices) labels.push("Duplicate vertices");
-   if (issue.isDuplicate) {
+  if (issue.outsidePakistan) labels.push("Outside Pakistan");
+  if (issue.extendsOutsidePakistan) labels.push("Extends outside Pakistan");
+  if (issue.pointCount != null) labels.push(`Points: ${issue.pointCount}`);
+  if (issue.isDuplicate) {
     if (issue.duplicateOfId && issue.duplicateOfId !== issue.fenceId) {
       labels.push(
         `Duplicate of #${issue.duplicateOfId}${
@@ -33,7 +36,14 @@ function issueLabels(issue: ValidationIssue): string[] {
 }
 
 function isIssueInvalid(issue: ValidationIssue): boolean {
-  return !issue.isValid || !issue.isSimple || issue.hasUnclosedRing || issue.hasDuplicateVertices;
+  return (
+    !issue.isValid ||
+    !issue.isSimple ||
+    issue.hasUnclosedRing ||
+    issue.hasDuplicateVertices ||
+    !!issue.outsidePakistan ||
+    !!issue.extendsOutsidePakistan
+  );
 }
 
 export default function ValidationPanel({
@@ -150,6 +160,8 @@ export default function ValidationPanel({
 
   const invalidIssuesOnly =
     validationResult?.issues.filter((issue) => isIssueInvalid(issue)) ?? [];
+  const outsidePakistanCount =
+    validationResult?.issues.filter((i) => i.outsidePakistan || i.extendsOutsidePakistan).length ?? 0;
   const duplicateOnlyIssues =
     validationResult?.issues.filter(
       (issue) => issue.isDuplicate && issue.duplicateOfId && issue.duplicateOfId !== issue.fenceId
@@ -183,6 +195,20 @@ export default function ValidationPanel({
               <p className="text-lg font-semibold text-red-800">{validationResult.invalidCount}</p>
             </div>
           </div>
+
+          {outsidePakistanCount > 0 && (
+            <div className="rounded border border-amber-200 bg-amber-50/80 px-2 py-1.5 text-xs text-amber-900">
+              <p className="font-medium">Red = Outside Pakistan ({outsidePakistanCount} fence(s))</p>
+              <p className="mt-1 text-amber-800">
+                Fence is either entirely outside the Pakistan boundary or extends outside it (e.g. into sea or neighbouring area). Boundary is from <code className="rounded bg-amber-100 px-0.5">pakistan_provinces</code>. If boundaries are correct (run <code className="rounded bg-amber-100 px-0.5">npm run import:pakistan:boundaries</code>), red means the geometry truly goes outside.
+              </p>
+              <p className="mt-1 font-medium text-amber-900">How to fix:</p>
+              <ul className="mt-0.5 list-inside list-disc space-y-0.5 text-amber-800">
+                <li>Click the fence on the map → &quot;Edit Shape&quot; → drag vertices so the polygon stays inside Pakistan, then Save.</li>
+                <li>Run <code className="rounded bg-amber-100 px-0.5">npm run clip:fences:pakistan</code> to clip both <code className="rounded bg-amber-100 px-0.5">fence</code> (Map) and <code className="rounded bg-amber-100 px-0.5">fences_master</code> (GIS) to Pakistan.</li>
+              </ul>
+            </div>
+          )}
 
           {invalidIssuesOnly.length > 0 && (
             <>

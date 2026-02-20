@@ -23,6 +23,9 @@ import GisMapLegend from "./GisMapLegend";
 const CENTER: [number, number] = [30.3753, 69.3451];
 const ZOOM = 6;
 const FENCE_BASE_OPACITY = 0.35;
+const FENCE_HIGHLIGHT_OPACITY = 0.6;
+const FENCE_HIGHLIGHT_WEIGHT = 2.5;
+const FENCE_HIDDEN_STYLE = { fillOpacity: 0, opacity: 0, weight: 0 };
 
 export interface GisMapViewFilterParams {
   search?: string;
@@ -50,9 +53,17 @@ export interface GisMapViewHandle {
   refetch: () => void;
 }
 
+/** Red style for fences outside or extending outside Pakistan (same as MapView invalid). */
+const OUT_OF_BOUNDS_FILL = "#ef4444";
+const OUT_OF_BOUNDS_STROKE = "#b91c1c";
+
 export interface GisMapViewProps {
   filterParams?: GisMapViewFilterParams;
   layerVisibility?: GisMapViewLayerVisibility;
+  /** When set, only this fence is shown on the map (single-fence view) */
+  selectedFenceId?: number | null;
+  /** Fence IDs that are outside or extend outside Pakistan (highlighted in red) */
+  outOfBoundsFenceIds?: number[];
   onFencesLoaded?: (features: FenceMasterFeature[]) => void;
   onZoomToFence?: (feat: FenceMasterFeature) => void;
 }
@@ -99,7 +110,7 @@ function getBoundsFromFeature(feat: FenceMasterFeature, L: typeof import("leafle
 }
 
 const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMapView(
-  { filterParams, layerVisibility, onFencesLoaded, onZoomToFence },
+  { filterParams, layerVisibility, selectedFenceId, outOfBoundsFenceIds, onFencesLoaded, onZoomToFence },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -115,10 +126,14 @@ const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMap
   const layersForCleanupRef = useRef<typeof layersRef.current>({ fences: null, roads: null, regions: null, cities: null, areas: null });
   const filterParamsRef = useRef(filterParams);
   const layerVisibilityRef = useRef(layerVisibility);
+  const outOfBoundsFenceIdsRef = useRef<number[] | undefined>(outOfBoundsFenceIds);
   const onFencesLoadedRef = useRef(onFencesLoaded);
   const onZoomToFenceRef = useRef(onZoomToFence);
+  const selectedFenceIdRef = useRef<number | null>(null);
+  selectedFenceIdRef.current = selectedFenceId ?? null;
   filterParamsRef.current = filterParams;
   layerVisibilityRef.current = layerVisibility;
+  outOfBoundsFenceIdsRef.current = outOfBoundsFenceIds;
   onFencesLoadedRef.current = onFencesLoaded;
   onZoomToFenceRef.current = onZoomToFence;
 
@@ -134,9 +149,26 @@ const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMap
       zoomToFeature(feat: FenceMasterFeature) {
         const map = mapRef.current;
         const L = leafletRef.current;
+        const fencesLayer = layersRef.current.fences;
         if (!L || !map) return;
         const bounds = getBoundsFromFeature(feat, L);
         if (bounds) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16 });
+        if (fencesLayer) {
+          fencesLayer.eachLayer((l: L.Layer) => {
+            const poly = l as L.Polygon & { _featureId?: number; _baseStyle?: { fillColor: string; fillOpacity: number; color: string; weight: number } };
+            const match = poly._featureId != null && (poly._featureId === feat.id || String(poly._featureId) === String(feat.id));
+            if (match && poly._baseStyle) {
+              poly.setStyle({
+                ...poly._baseStyle,
+                fillOpacity: FENCE_HIGHLIGHT_OPACITY,
+                weight: FENCE_HIGHLIGHT_WEIGHT,
+              });
+              poly.bringToFront();
+            } else if (poly._baseStyle) {
+              poly.setStyle(poly._baseStyle);
+            }
+          });
+        }
       },
       getBounds() {
         const map = mapRef.current;
@@ -182,6 +214,7 @@ const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMap
     const addFences = (features: FenceMasterFeature[]) => {
       const prev = layersRef.current.fences;
       if (prev && map.hasLayer(prev)) map.removeLayer(prev);
+      const outOfBounds = new Set(outOfBoundsFenceIdsRef.current ?? []);
       const fc: GeoJSONFeatureCollection<FenceMasterFeature> = { type: "FeatureCollection", features };
       const layer = L.geoJSON(fc, {
         style: (f?: unknown) => {
@@ -194,11 +227,29 @@ const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMap
                   properties: { name: "Unknown" },
                   geometry: { type: "Polygon", coordinates: [] },
                 };
+          if (feat.id != null && outOfBounds.has(Number(feat.id))) {
+            return {
+              fillColor: OUT_OF_BOUNDS_FILL,
+              fillOpacity: FENCE_BASE_OPACITY,
+              color: OUT_OF_BOUNDS_STROKE,
+              weight: FENCE_HIGHLIGHT_WEIGHT,
+            };
+          }
           return getFenceStyleForGisMap(feat, { fillOpacity: FENCE_BASE_OPACITY });
         },
-        onEachFeature(f: FenceMasterFeature, layer: L.GeoJSON) {
-          const l = layer as unknown as L.Polygon;
-          l.bindPopup(fencePopupHtml(f), { maxWidth: 320 });
+        onEachFeature(f: FenceMasterFeature, geoJsonLayer: L.GeoJSON) {
+          const l = geoJsonLayer as unknown as L.Polygon & { _featureId?: number; _baseStyle?: ReturnType<typeof getFenceStyleForGisMap> };
+          l._featureId = f.id;
+          l._baseStyle =
+            f.id != null && outOfBounds.has(Number(f.id))
+              ? { fillColor: OUT_OF_BOUNDS_FILL, fillOpacity: FENCE_BASE_OPACITY, color: OUT_OF_BOUNDS_STROKE, weight: FENCE_HIGHLIGHT_WEIGHT }
+              : getFenceStyleForGisMap(f, { fillOpacity: FENCE_BASE_OPACITY });
+          const popupHtml =
+            fencePopupHtml(f) +
+            (f.id != null && outOfBounds.has(Number(f.id))
+              ? '<div class="mt-2 border-t border-red-200 pt-2 text-xs text-red-700"><strong>Validation:</strong> Outside Pakistan or extends outside</div>'
+              : "");
+          l.bindPopup(popupHtml, { maxWidth: 320 });
           l.on("click", () => onZoomToFenceRef.current?.(f));
         },
       });
@@ -288,12 +339,12 @@ const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMap
         const params = new URLSearchParams();
         params.set("bbox", bboxStr);
         if (fp?.search?.trim()) params.set("search", fp.search.trim());
-        if (fp?.region) params.set("region_name", fp.region);
+        if (fp?.region) params.set("region", fp.region);
         if (fp?.region_name) params.set("region_name", fp.region_name);
         if (fp?.status) params.set("status", fp.status);
-        if (fp?.route_type) params.set("route_type", fp.route_type);
-        if (fp?.routeType) params.set("route_type", fp.routeType);
-        if (fp?.bigOnly === "1" || fp?.is_big === "1") params.set("is_big", "1");
+        const rt = fp?.route_type || fp?.routeType || fp?.roadType;
+        if (rt) params.set("route_type", rt);
+        if (fp?.bigOnly === "1" || fp?.is_big === "1") params.set("bigOnly", "1");
 
         const base = "/api/gis";
         const [fencesRes, roadsRes, regionsRes, citiesRes, areasRes] = await Promise.all([
@@ -346,6 +397,7 @@ const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMap
     loadAll();
 
     const onMoveEnd = () => {
+      if (selectedFenceIdRef.current != null) return;
       refetch.current?.();
     };
     map.on("moveend", onMoveEnd);
@@ -390,6 +442,69 @@ const GisMapView = forwardRef<GisMapViewHandle, GisMapViewProps>(function GisMap
   useEffect(() => {
     refetch.current?.();
   }, [filterParams]);
+
+  useEffect(() => {
+    const fencesLayer = layersRef.current.fences;
+    const outOfBounds = new Set(outOfBoundsFenceIds ?? []);
+    if (!fencesLayer) return;
+    fencesLayer.eachLayer((l: L.Layer) => {
+      const poly = l as L.Polygon & { _featureId?: number; _baseStyle?: { fillColor: string; fillOpacity: number; color: string; weight: number } };
+      const fid = poly._featureId;
+      const isOut = fid != null && outOfBounds.has(Number(fid));
+      if (isOut) {
+        poly.setStyle({
+          fillColor: OUT_OF_BOUNDS_FILL,
+          fillOpacity: FENCE_BASE_OPACITY,
+          color: OUT_OF_BOUNDS_STROKE,
+          weight: FENCE_HIGHLIGHT_WEIGHT,
+        });
+      } else if (poly._baseStyle) {
+        poly.setStyle(poly._baseStyle);
+      }
+    });
+  }, [outOfBoundsFenceIds]);
+
+  useEffect(() => {
+    const fencesLayer = layersRef.current.fences;
+    const map = mapRef.current;
+    const sid = selectedFenceId;
+    if (!fencesLayer) return;
+    if (sid == null) {
+      fencesLayer.eachLayer((l: L.Layer) => {
+        const poly = l as L.Polygon & { _baseStyle?: { fillColor: string; fillOpacity: number; color: string; weight: number } };
+        if (poly._baseStyle) poly.setStyle(poly._baseStyle);
+      });
+      if (map) {
+        let combined: L.LatLngBounds | null = null;
+        fencesLayer.eachLayer((l: L.Layer) => {
+          const b = (l as L.Polygon).getBounds?.();
+          if (b) combined = combined ? combined.extend(b) : b;
+        });
+        if (combined) map.fitBounds(combined, { padding: [24, 24], maxZoom: 16 });
+      }
+      return;
+    }
+    let found: (L.Polygon & { getBounds?: () => L.LatLngBounds }) | null = null;
+    fencesLayer.eachLayer((l: L.Layer) => {
+      const poly = l as L.Polygon & { _featureId?: number; _baseStyle?: { fillColor: string; fillOpacity: number; color: string; weight: number } };
+      const match = poly._featureId != null && (poly._featureId === sid || String(poly._featureId) === String(sid));
+      if (match && poly._baseStyle) {
+        poly.setStyle({
+          ...poly._baseStyle,
+          fillOpacity: FENCE_HIGHLIGHT_OPACITY,
+          weight: FENCE_HIGHLIGHT_WEIGHT,
+        });
+        poly.bringToFront();
+        found = poly as L.Polygon & { getBounds?: () => L.LatLngBounds };
+      } else {
+        poly.setStyle(FENCE_HIDDEN_STYLE);
+      }
+    });
+    if (found && map) {
+      const b = (found as L.Polygon).getBounds?.();
+      if (b) map.fitBounds(b, { padding: [24, 24], maxZoom: 16 });
+    }
+  }, [selectedFenceId]);
 
   return (
     <div className="relative h-full w-full">

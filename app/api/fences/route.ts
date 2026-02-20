@@ -178,6 +178,16 @@ export async function GET(request: Request) {
           : "";
 
       const whereTail = `${bboxClause}${filterClauses}${statusDefaultClause}${dedupeClause}`;
+      const simplifyParam = searchParams.get("simplify");
+      const tolerance = typeof simplifyParam === "string" ? parseFloat(simplifyParam) : NaN;
+      const useSimplify = Number.isFinite(tolerance) && tolerance > 0 && tolerance < 1;
+      const params = [...filterParams];
+      if (useSimplify) params.push(tolerance);
+      const geomCol =
+        useSimplify && params.length > 0
+          ? `ST_AsGeoJSON(ST_SimplifyPreserveTopology(d.geom, $${params.length}))::json`
+          : "ST_AsGeoJSON(d.geom)::json";
+
       if (countOnly) {
         const r = await client.query<{ count: string }>(
           `SELECT COUNT(*) as count FROM ${FENCES_TABLE} f, LATERAL ST_Dump(f.geom) AS d WHERE f.geom IS NOT NULL ${whereTail}`,
@@ -190,7 +200,7 @@ export async function GET(request: Request) {
       let extended = false;
       const sqlSimpleWithFilter = `
   SELECT f.id, f.name,
-    ST_AsGeoJSON(d.geom)::json as geometry
+    ${geomCol} as geometry
   FROM ${FENCES_TABLE} f,
   LATERAL ST_Dump(f.geom) AS d
   WHERE f.geom IS NOT NULL
@@ -199,7 +209,7 @@ export async function GET(request: Request) {
 `;
       const sqlExtendedWithFilter = `
   SELECT f.id, f.name, f.route_type AS "routeType", f.region,
-    ST_AsGeoJSON(d.geom)::json as geometry
+    ${geomCol} as geometry
   FROM ${FENCES_TABLE} f,
   LATERAL ST_Dump(f.geom) AS d
   WHERE f.geom IS NOT NULL
@@ -207,11 +217,11 @@ export async function GET(request: Request) {
   ORDER BY f.id, d.path;
 `;
       try {
-        const r = await client.query<RowExtended>(sqlExtendedWithFilter, filterParams);
+        const r = await client.query<RowExtended>(sqlExtendedWithFilter, params);
         rows = r.rows;
         extended = true;
       } catch {
-        const r = await client.query<RowSimple>(sqlSimpleWithFilter, filterParams);
+        const r = await client.query<RowSimple>(sqlSimpleWithFilter, params);
         rows = r.rows;
       }
       const features = toFeatures(rows, extended);

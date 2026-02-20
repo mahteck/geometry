@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -36,6 +36,15 @@ export default function GisMapPageClient() {
   );
   const [results, setResults] = useState<FenceMasterFeature[]>([]);
   const [resultCount, setResultCount] = useState<number | null>(null);
+  const [selectedFenceId, setSelectedFenceId] = useState<number | null>(null);
+  const [outOfBoundsFenceIds, setOutOfBoundsFenceIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    fetch("/api/gis/fences/outside-pakistan")
+      .then((res) => (res.ok ? res.json() : { fenceIds: [] }))
+      .then((data: { fenceIds?: number[] }) => setOutOfBoundsFenceIds(Array.isArray(data?.fenceIds) ? data.fenceIds : []))
+      .catch(() => setOutOfBoundsFenceIds([]));
+  }, []);
 
   const hasActiveFilters =
     Object.keys(gisFilterStateToParams(filterState)).length > 0;
@@ -85,8 +94,40 @@ export default function GisMapPageClient() {
     setResultCount(features.length);
   }, []);
 
+  /** Filter results by current search/filter so the list only shows matching fences. */
+  const filteredResults = useMemo(() => {
+    if (!results.length) return results;
+    const search = (filterState.search ?? "").trim().toLowerCase();
+    const region = (filterState.region ?? "").trim();
+    const status = (filterState.status ?? "").trim().toLowerCase();
+    const roadType = (filterState.roadType ?? "").trim().toLowerCase();
+    const showBigOnly = filterState.showBigFences === true;
+    return results.filter((f) => {
+      if (search && !(f.properties?.name ?? "").toLowerCase().includes(search)) return false;
+      if (region && (f.properties?.region_name ?? "").trim() !== region) return false;
+      if (status && (f.properties?.status ?? "").toLowerCase().trim() !== status) return false;
+      if (roadType) {
+        const rt = (f.properties?.route_type ?? "").toLowerCase().trim();
+        const match =
+          rt === roadType ||
+          (roadType === "trunk" && rt === "highway") ||
+          (roadType === "primary" && rt === "highway") ||
+          (roadType === "secondary" && rt === "highway");
+        if (!match) return false;
+      }
+      if (showBigOnly && !f.properties?.is_big) return false;
+      return true;
+    });
+  }, [results, filterState.search, filterState.region, filterState.status, filterState.roadType, filterState.showBigFences]);
+
   const onZoomToFeature = useCallback((feat: FenceMasterFeature) => {
+    const id = feat.id != null ? Number(feat.id) : null;
+    setSelectedFenceId(id);
     mapRef.current?.zoomToFeature(feat);
+  }, []);
+
+  const onClearSelection = useCallback(() => {
+    setSelectedFenceId(null);
   }, []);
 
   return (
@@ -115,11 +156,13 @@ export default function GisMapPageClient() {
           <GisFilterPanel
             filterState={filterState}
             onFilterChange={onFilterChange}
-            results={results}
-            resultCount={resultCount}
+            results={filteredResults}
+            resultCount={filteredResults.length}
             onZoomToFeature={onZoomToFeature}
             onClearFilters={onClearFilters}
             hasActiveFilters={hasActiveFilters}
+            selectedFenceId={selectedFenceId}
+            onClearSelection={onClearSelection}
           />
           <div className="mt-3">
             <p className="text-xs text-slate-500">
@@ -134,6 +177,8 @@ export default function GisMapPageClient() {
             ref={mapRef}
             filterParams={filterParams}
             layerVisibility={filterState.layers}
+            selectedFenceId={selectedFenceId}
+            outOfBoundsFenceIds={outOfBoundsFenceIds}
             onFencesLoaded={onFencesLoaded}
             onZoomToFence={onZoomToFeature}
           />
